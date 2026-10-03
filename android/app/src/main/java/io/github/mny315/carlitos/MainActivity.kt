@@ -36,6 +36,10 @@ class MainActivity : NativeActivity() {
         Bridge.emit("hidden", "value" to false)
         updateFrameRate()
     }
+    override fun onPostResume() {
+        super.onPostResume()
+        BackgroundPlayback.requestOnce(this)
+    }
     @Suppress("DEPRECATION")
     private fun updateFrameRate(surface: Surface? = null) {
         val display = windowManager.defaultDisplay

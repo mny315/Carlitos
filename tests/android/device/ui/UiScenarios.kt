@@ -5,7 +5,8 @@ import android.content.pm.ActivityInfo
 import androidx.media3.common.util.UnstableApi
 
 @UnstableApi
-internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = false, inputOnly: Boolean = false) {
+internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = false, inputOnly: Boolean = false,
+    pauseOnly: Boolean = false, requireBluetooth: Boolean = false) {
     check(instrumentation.targetContext.packageName.endsWith(".playbacktest"))
     val originalFont = shell("settings get system font_scale")
     val originalSize = shell("wm size").lineSequence().firstOrNull { it.startsWith("Override size:") }?.substringAfter(":")?.trim()
@@ -21,16 +22,20 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         main { Bridge.activity.get()!!.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
         eventually("UI startup") { try { call().getDouble("width") > 0 } catch (_: Exception) { false } }
         grantFixtures(instrumentation, ui = true)
-        if (!libraryOnly && !chaptersOnly && !inputOnly) DocumentChecks(instrumentation).apply { fixtures(); slice(); largeAudioPacket(); timeouts() }
+        if (!libraryOnly && !chaptersOnly && !inputOnly && !pauseOnly) DocumentChecks(instrumentation).apply { fixtures(); slice(); largeAudioPacket(); timeouts() }
         PlaybackSuite(instrumentation).fixture(title, listOf("tone", "part2"))
         call("setup")
+        if (pauseOnly) {
+            pauseResponsivenessChecks(requireBluetooth)
+            return
+        }
         if (inputOnly) {
             imeSelectionAndComposition(title)
             return
         }
         if (chaptersOnly) {
             chapterPlaybackChecks(title)
-            pauseResponsivenessChecks()
+            pauseResponsivenessChecks(requireBluetooth)
             mouseWheelChecks()
             return
         }
@@ -47,7 +52,7 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         bookSwipeChecks(title)
         if (libraryOnly) return
         chapterPlaybackChecks(title)
-        pauseResponsivenessChecks()
+        pauseResponsivenessChecks(requireBluetooth)
         mouseWheelChecks()
         presentationChecks(title, packageName)
     } finally {

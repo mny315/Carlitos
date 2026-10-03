@@ -1,7 +1,8 @@
 package io.github.mny315.carlitos
 
-import android.os.SystemClock
+import android.media.AudioDeviceInfo
 import android.media.AudioTrack
+import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -16,7 +17,7 @@ import kotlin.math.abs
 
 /** Exercise touch transport without tapAt's intentional 350 ms settling delay. */
 @UnstableApi
-internal fun UiSuite.pauseResponsivenessChecks() {
+internal fun UiSuite.pauseResponsivenessChecks(requireBluetooth: Boolean = false) {
     val playback = PlaybackSuite(instrumentation)
     val parts = listOf("tone", "silence").map { id ->
         val state = playback.call("state")
@@ -55,7 +56,11 @@ internal fun UiSuite.pauseResponsivenessChecks() {
                 val position = (sink.getCurrentPositionUs(false) - offset) / 1000
                 val track = DefaultAudioSink::class.java.getDeclaredField("audioTrack").apply { isAccessible = true }.get(sink) as AudioTrack
                 check(track.playState == AudioTrack.PLAYSTATE_PAUSED) { "AudioTrack did not actually pause" }
-                outputDetails = "mode=${track.performanceMode} underruns=${track.underrunCount} frames=${track.bufferSizeInFrames} rate=${track.sampleRate} route=${track.routedDevice?.type}"
+                outputDetails = "mode=${track.performanceMode} underruns=${track.underrunCount} frames=${track.bufferSizeInFrames} rate=${track.sampleRate} channels=${track.channelCount} route=${track.routedDevice?.type}"
+                if (requireBluetooth) check(track.routedDevice?.type in listOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                    AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER)) {
+                    "Bluetooth pause check used another output: $outputDetails"
+                }
                 position
             }
             done.countDown()
@@ -82,7 +87,7 @@ internal fun UiSuite.pauseResponsivenessChecks() {
         }
         note("rate and silence changes queued immediately before a load are preserved")
         for ((index, part) in parts.withIndex()) {
-            for (speed in listOf(1.0, 1.75, 3.0)) {
+            for (speed in listOf(1.0, 1.75, 2.0, 3.0)) {
                 Bridge.emit("rate", "value" to speed)
                 playback.call("silence", "value" to (index == 1))
                 eventually("Pause timing playback settings") {

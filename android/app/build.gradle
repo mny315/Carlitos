@@ -23,7 +23,7 @@ android {
         testInstrumentationRunner 'io.github.mny315.carlitos.DeviceInstrumentation'
         minSdk versions.minSdk
         targetSdk versions.targetSdk
-        versionCode 9
+        versionCode 10
         versionName appVersion
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
     }

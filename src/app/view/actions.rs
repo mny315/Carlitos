@@ -134,6 +134,12 @@ impl View {
                 None
             }
             #[cfg(target_os = "android")]
+            "battery-settings" => {
+                crate::android::bridge::dispatch(serde_json::json!({"op":"battery-settings"}))
+                    .err()
+                    .map(|e| Command::Error(format!("{e:#}")))
+            }
+            #[cfg(target_os = "android")]
             "pick-file" => {
                 crate::android::bridge::dispatch(serde_json::json!({"op":"pick", "kind":"file"}))
                     .err()

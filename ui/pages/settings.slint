@@ -68,6 +68,11 @@ component SettingsContent inherits VerticalLayout {
         if !State.android: Toggle { text: Theme.t("Закрывать в трей", "Close to tray"); description: Theme.t("При наличии трея окно скрывается в него.", "Hides the window in the system tray when available."); checked <=> State.close-to-tray; toggled => { State.settings-changed(); } }
         Toggle { text: Theme.t("Отключить анимации", "Disable animations"); description: Theme.t("Убирает плавные переходы страниц, меню, цветов и плеера.", "Turns off smooth page, menu, color and player transitions."); checked <=> Theme.reduced-motion; toggled => { State.settings-changed(); } }
         Toggle { text: Theme.t("Пропускать тишину", "Skip silence"); description: Theme.t("Сокращает длинные тихие паузы, сохраняя короткие паузы между фразами.", "Shortens long quiet pauses while keeping brief pauses between phrases."); checked <=> State.skip-silence; toggled => { State.action("skip-silence", ""); } }
+        if State.android: VerticalLayout {
+            spacing: 8px;
+            Action { fill: true; text: Theme.t("Фоновая работа", "Background playback"); clicked => { State.action("battery-settings", ""); } }
+            Label { text: Theme.t("Отключите оптимизацию батареи для Carlitos, чтобы снизить риск остановки книги при выключенном экране.", "Turn off battery optimization for Carlitos to reduce interruptions while the screen is off."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
+        }
         Rectangle { min-height: 16px; vertical-stretch: 1; }
 }
 

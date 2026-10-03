@@ -4,11 +4,13 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -40,6 +42,8 @@ class DeviceInstrumentation : Instrumentation() {
     private var libraryOnly = false
     private var chaptersOnly = false
     private var inputOnly = false
+    private var pauseOnly = false
+    private var requireBluetooth = false
     private var timedSwipe: String? = null
     private var revoke = false
     private var importBenchmark: String? = null
@@ -47,6 +51,7 @@ class DeviceInstrumentation : Instrumentation() {
     private var formatsOnly = false
     private var formatPlayMs = 150L
     private var settingsRecovery = false
+    private var batteryOnly = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         sources = arguments?.getString("suite") == "sources"
@@ -56,6 +61,8 @@ class DeviceInstrumentation : Instrumentation() {
         libraryOnly = arguments?.getString("library-only") == "true"
         chaptersOnly = arguments?.getString("chapters-only") == "true"
         inputOnly = arguments?.getString("input-only") == "true"
+        pauseOnly = arguments?.getString("pause-only") == "true"
+        requireBluetooth = arguments?.getString("require-bluetooth") == "true"
         timedSwipe = arguments?.getString("timed-swipe")
         revoke = arguments?.getString("revoke") == "true"
         importBenchmark = arguments?.getString("import-benchmark")
@@ -63,10 +70,23 @@ class DeviceInstrumentation : Instrumentation() {
         formatsOnly = arguments?.getString("formats-only") == "true"
         formatPlayMs = arguments?.getString("format-play-ms")?.toLong() ?: 150L
         settingsRecovery = arguments?.getString("settings-recovery") == "true"
+        batteryOnly = arguments?.getString("battery-only") == "true"
+        if (!batteryOnly) {
+            // Other suites exercise the app, without an onboarding dialog
+            // covering their input or changing the device's battery policy.
+            addMonitor(IntentFilter(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                addDataScheme("package")
+            }, ActivityResult(Activity.RESULT_CANCELED, null), true)
+        }
         start()
     }
     override fun onStart() {
         try {
+            if (batteryOnly) {
+                BatteryOptimizationSuite(this).run()
+                finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android battery optimization request\n") })
+                return
+            }
             if (settingsRecovery) {
                 UiSuite(this).settingsRecoveryNotice()
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android settings recovery notice\n") })
@@ -113,7 +133,7 @@ class DeviceInstrumentation : Instrumentation() {
                 return
             }
             if (ui) {
-                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly)
+                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly, pauseOnly, requireBluetooth)
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android UI tests\n") })
                 return
             }

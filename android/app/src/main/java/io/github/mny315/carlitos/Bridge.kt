@@ -56,6 +56,11 @@ object Bridge {
                     activity.get()?.moveTaskToBack(true)
                 } else if (command.getString("op") == "system-bars") {
                     activity.get()?.updateSystemBars(command.getBoolean("dark"))
+                } else if (command.getString("op") == "battery-settings") {
+                    val current = activity.get()
+                    if (current != null && !BackgroundPlayback.openSettings(current)) {
+                        emit("error", "message" to "Could not open Android battery settings")
+                    }
                 } else if (command.getString("op") == "pick") {
                     activity.get()?.pick(command.optString("kind", "file"), command.optString("owner"))
                         ?: emit("error", "message" to "Open the app to select an audio file")
