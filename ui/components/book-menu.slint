@@ -1,0 +1,35 @@
+import { State } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action } from "controls.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component BookMenu inherits Rectangle {
+    private property <float> reveal: State.book-menu ? 1 : 0;
+    animate reveal { duration: Theme.motion; easing: ease-out; }
+    visible: State.book-menu || reveal > 0;
+    // Keep the menu outside the scrolling list so even its last row has room.
+    TouchArea { enabled: State.book-menu; clicked => { State.book-menu = false; } }
+    if root.visible: FocusScope {
+      enabled: State.book-menu;
+      init => { self.focus(); }
+      Rectangle {
+        opacity: root.reveal;
+        width: State.android ? parent.width - 16px : min(240px, parent.width - 16px);
+        height: min(parent.height - 16px, menu.preferred-height);
+        x: State.android ? 8px : clamp(State.book-menu-x - self.width, 8px, parent.width - self.width - 8px);
+        y: State.android ? parent.height - self.height - 8px : (State.book-menu-y + max(38px, Theme.body + 20px) + 8px + self.height <= parent.height - 8px
+            ? State.book-menu-y + max(38px, Theme.body + 20px) + 8px
+            : max(8px, State.book-menu-y - self.height - 8px)) - (1 - root.reveal) * 6px;
+        border-radius: 12px; border-width: 1px; border-color: Theme.line;
+        background: Theme.surface;
+        TouchArea { }
+        ScrollView { menu := VerticalLayout { padding: 8px; spacing: 4px;
+            Action { text: Theme.t("Изменить", "Edit"); icon: @image-url("../icons/edit.svg"); accessible-label: Theme.t("Редактировать книгу", "Edit book"); fill: true; quiet: true; enabled: State.book-menu; clicked => { State.action("open-book", State.menu-book.key); State.action("begin-edit", State.menu-book.key); State.book-menu = false; } }
+            Action { text: Theme.t("В законченные", "Mark as completed"); icon: @image-url("../icons/check.svg"); accessible-label: Theme.t("Переместить в завершённые", "Move to completed books"); fill: true; quiet: true; enabled: State.book-menu && !State.menu-book.completed; clicked => { State.action("complete", State.menu-book.key); State.book-menu = false; } }
+            if State.menu-book.started: Action { text: Theme.t("В неначатые", "Mark as unstarted"); icon: @image-url("../icons/refresh.svg"); accessible-label: Theme.t("В неначатые: сбросить прогресс", "Mark as unstarted: reset progress"); fill: true; quiet: true; enabled: State.book-menu; clicked => { State.action("reset-progress", State.menu-book.key); State.book-menu = false; } }
+            Rectangle { height: 1px; background: Theme.line; }
+            Action { text: Theme.t("Удалить", "Remove"); icon: @image-url("../icons/trash.svg"); accessible-label: Theme.t("Удалить из библиотеки", "Remove from library"); fill: true; quiet: true; destructive: true; enabled: State.book-menu; clicked => { State.remove-key = State.menu-book.key; State.remove-kind = "book"; State.overlay = 1; State.book-menu = false; } }
+        } }
+      }
+    }
+}

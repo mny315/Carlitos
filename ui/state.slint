@@ -1,0 +1,136 @@
+export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, move-offset: float }
+export struct PartItem { key: string, title: string, detail: string, number: string, active: bool, chapter: bool }
+export struct ImportItem { title: string, author: string, detail: string, included: bool }
+export struct SourceItem { key: string, path: string, detail: string }
+import { Theme } from "components/theme.slint";
+export global State {
+    out property <[string]> sort-labels: [Theme.t("Сначала начатые", "Started first"), Theme.t("По названию", "Title"), Theme.t("По автору", "Author"), Theme.t("По году", "Year"), Theme.t("По жанру", "Genre")];
+    out property <[string]> theme-labels: [Theme.t("Тёмная тема", "Dark theme"), Theme.t("Светлая тема", "Light theme"), Theme.t("Как в системе", "System theme")];
+    out property <[string]> language-labels: [Theme.t("Язык системы", "System language"), "Русский", "English"];
+    in-out property <int> page: 0;
+    in-out property <int> filter: 0;
+    in-out property <int> sort-index: 0;
+    in-out property <int> completed-sort-index: 0;
+    in-out property <length> sort-menu-x;
+    in-out property <length> sort-menu-y;
+    in-out property <length> navigation-menu-x;
+    in-out property <length> navigation-menu-y;
+    in-out property <string> query;
+    in-out property <bool> search-open: false;
+    in-out property <[BookItem]> books;
+    in-out property <length> books-scroll-y;
+    in-out property <bool> books-moving;
+    private property <duration> books-move-start;
+    out property <length> books-move-scroll-y;
+    private property <float> books-move-time: books-moving ? clamp((animation-tick() - books-move-start) / 420ms, 0, 1) : 1;
+    out property <float> books-move-progress: 1 - pow(1 - books-move-time, 3);
+    public function start-book-move() {
+        books-move-scroll-y = books-scroll-y + books-move-scroll-y * (1 - books-move-progress);
+        books-scroll-y = 0px;
+        books-move-start = animation-tick();
+        books-moving = true;
+    }
+    public function finish-book-move() {
+        if (books-move-time >= 1) { books-moving = false; }
+    }
+    in-out property <[PartItem]> parts;
+    in-out property <[ImportItem]> drafts;
+    in-out property <[PartItem]> draft-files;
+    in-out property <[SourceItem]> sources;
+    in-out property <int> book-count;
+    in-out property <BookItem> selected;
+    in-out property <BookItem> current;
+    in-out property <bool> active: false;
+    in-out property <bool> playing: false;
+    in-out property <bool> seekable: false;
+    in-out property <bool> playback-loading: false;
+    in-out property <bool> settled-seekable: false;
+    out property <bool> seek-controls-lit: seekable || (playback-loading && settled-seekable);
+    in-out property <bool> loading: true;
+    in-out property <bool> scanning: false;
+    in-out property <bool> picker-busy: false;
+    in-out property <string> picker-owner;
+    in-out property <string> scan-status;
+    in-out property <string> import-issues;
+    in-out property <string> part-title;
+    in-out property <string> position-text: "0:00";
+    in-out property <string> duration-text: "0:00";
+    in-out property <float> duration-ms;
+    in-out property <float> position: 0;
+    in-out property <float> volume: 0.7;
+    in-out property <float> rate: 1;
+    in-out property <bool> skip-silence: false;
+    in-out property <bool> muted: false;
+    in-out property <bool> previous-enabled;
+    in-out property <bool> next-enabled;
+    in-out property <string> notice;
+    in-out property <string> import-path;
+    in-out property <string> import-folder-name;
+    out property <string> import-folder-label: !android ? import-path : import-folder-name != "" ? import-folder-name : import-path != "" ? Theme.t("Выбранная папка", "Selected folder") : Theme.t("Выбрать папку", "Choose folder");
+    in-out property <bool> single-book: false;
+    in-out property <int> selected-draft: -1;
+    in-out property <string> draft-title;
+    in-out property <string> draft-author;
+    in-out property <int> theme-index: 0;
+    in-out property <int> language-index: 0;
+    in-out property <int> text-size-percent: 100;
+    in-out property <int> ui-scale-percent: 100;
+    in-out property <bool> close-to-tray: true;
+    out property <int> seek-step: 10;
+    in-out property <int> overlay: 0;
+    in-out property <string> edit-title;
+    in-out property <string> edit-author;
+    in-out property <string> edit-key;
+    in-out property <string> edit-cover-path;
+    in-out property <image> edit-cover;
+    in-out property <string> edit-cover-error;
+    in-out property <bool> cover-loading;
+    in-out property <string> exact-time;
+    in-out property <string> relocate-key;
+    in-out property <string> relocate-path;
+    in-out property <bool> source-busy;
+    in-out property <string> source-error;
+    in-out property <string> remove-key;
+    in-out property <string> remove-kind;
+    in-out property <bool> book-menu: false;
+    in-out property <BookItem> menu-book;
+    in-out property <length> book-menu-x;
+    in-out property <length> book-menu-y;
+    in-out property <bool> contents: false;
+    in-out property <bool> reorder: false;
+    in-out property <bool> demo: false;
+    in-out property <bool> android: false;
+    in-out property <bool> windows: false;
+    in-out property <bool> compact: false;
+    in-out property <bool> short-screen: false;
+    in-out property <bool> keyboard-visible: false;
+    callback action(string, string);
+    callback search(string, int);
+    callback seek(float);
+    callback set-volume(float);
+    callback set-rate(float);
+    callback settings-changed;
+    callback display-settings-preview;
+    in-out property <bool> display-settings-dragging: false;
+    callback choose-folder;
+    callback choose-source-folder;
+    callback choose-cover;
+    callback draft-changed(int, string, string, bool);
+    callback draft-file-action(int, string);
+    public function navigate(page: int) { self.page = page; self.book-menu = false; }
+    public function close-search() { search-open = false; query = ""; search("", filter); }
+    // Shared by Android's gesture/button Back and mobile keyboard navigation.
+    public function mobile-back() -> bool {
+        if (overlay != 0) { overlay = 0; return true; }
+        if (book-menu) { book-menu = false; return true; }
+        if (page == 1 && reorder) { reorder = false; return true; }
+        if (page == 2 && selected-draft >= 0) { selected-draft = -1; return true; }
+        if (page != 0) {
+            if (page == 2) { action("cancel-scan", ""); }
+            navigate(0); return true;
+        }
+        if (android && search-open) { close-search(); return true; }
+        if (query != "") { query = ""; search("", filter); return true; }
+        return false;
+    }
+}

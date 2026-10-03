@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Carlitos
+GenericName=Audiobook Player
+GenericName[ru]=Плеер аудиокниг
+Comment=Your books. Your pace.
+Comment[ru]=Ваши книги. Ваш ритм.
+Exec=Carlitos
+Icon=io.github.mny315.Carlitos
+Terminal=false
+Categories=Audio;AudioVideo;Player;
+Keywords=audiobook;book;player;аудиокнига;книга;
+StartupNotify=true
+StartupWMClass=io.github.mny315.Carlitos
+DBusActivatable=false

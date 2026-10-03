@@ -1,0 +1,12 @@
+{
+  "rust": "1.98.1",
+  "minSdk": 26,
+  "compileSdk": 35,
+  "targetSdk": 35,
+  "buildTools": "35.0.0",
+  "ndk": "28.2.13676358",
+  "agp": "8.9.3",
+  "gradle": "8.11.1",
+  "kotlin": "2.1.20",
+  "media3": "1.7.1"
+}

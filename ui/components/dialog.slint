@@ -1,0 +1,162 @@
+import { State } from "../state.slint";
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Action, Label, Field, Cover, SeekBar } from "controls.slint";
+import { Transport, MobileTimeline } from "player.slint";
+import { PlaybackSheet } from "playback-sheet.slint";
+export component AppDialog inherits Rectangle {
+    in property <length> top-inset;
+    in property <length> bottom-inset;
+    in property <length> left-inset;
+    in property <length> right-inset;
+    in property <int> requested-kind: State.overlay;
+    private property <int> dialog-kind: 0;
+    private property <bool> sort-menu: dialog-kind == 9;
+    private property <bool> navigation-menu: dialog-kind == 12;
+    private property <bool> popup-menu: sort-menu || navigation-menu;
+    private property <bool> playback-sheet: State.android && (dialog-kind == 6 || dialog-kind == 7);
+    function dismiss() { State.overlay = 0; }
+    function dismiss-outside() {
+        if (root.requested-kind != 0 && (root.popup-menu || root.playback-sheet)) { root.dismiss(); }
+    }
+    // Keep the closing dialog's content until its fade has finished.
+    changed requested-kind => {
+        if (root.requested-kind != 0) {
+            root.dialog-kind = root.requested-kind;
+            dialog-focus.focus();
+        }
+    }
+    opacity: root.requested-kind != 0 ? 1 : 0;
+    visible: root.requested-kind != 0 || self.opacity > 0;
+    animate opacity { duration: Theme.page-motion; easing: ease-out; }
+    background: root.popup-menu ? transparent : #00000090;
+    TouchArea { clicked => { root.dismiss-outside(); } }
+    forward-focus: dialog-focus;
+    public function focus-dialog() { dialog-focus.focus(); }
+    init => { if (root.requested-kind != 0) { root.dialog-kind = root.requested-kind; dialog-focus.focus(); } }
+    dialog-focus := FocusScope {
+        x: root.left-inset; y: root.top-inset;
+        width: root.width - root.left-inset - root.right-inset;
+        height: root.height - root.top-inset - root.bottom-inset;
+        enabled: root.requested-kind != 0;
+        key-released(event) => {
+            if (State.android && root.requested-kind != 0 && event.text == Key.Back) { State.action("android-back", ""); return accept; }
+            return reject;
+        }
+        key-pressed(event) => {
+            if (State.android && root.requested-kind != 0 && event.text == Key.Back) {
+                return accept;
+            }
+            if (event.text == Key.Escape) { State.overlay = 0; return accept; }
+            return reject;
+        }
+    TouchArea { clicked => { root.dismiss-outside(); } }
+    if root.playback-sheet: PlaybackSheet {
+        speed: root.dialog-kind == 6;
+        x: (parent.width - self.width) / 2;
+        // Travel from below the screen, including the bottom safe area.
+        y: parent.height - self.height + (1 - root.opacity) * (self.height + root.bottom-inset);
+        width: min(parent.width - 24px, 480px);
+        height: min(parent.height - 12px, self.preferred-height);
+        done => { root.dismiss(); }
+    }
+    if !root.playback-sheet: Rectangle {
+        x: root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-x - self.width : State.sort-menu-x) - root.left-inset, 8px, parent.width - self.width - 8px) : (parent.width - self.width) / 2;
+        y: root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-y : State.sort-menu-y) - root.top-inset + 4px, 8px, parent.height - self.height - 8px) : (parent.height - self.height) / 2 + (1 - root.opacity) * 12px;
+        width: root.popup-menu ? min(parent.width - 16px, 240px * Theme.font-scale) : min(parent.width - (State.android ? 32px : 24px), State.android ? 400px : 460px);
+        height: min(parent.height - 24px, dialog.preferred-height);
+        background: Theme.surface; border-radius: root.popup-menu ? 12px : State.android ? 20px : 12px; border-width: 1px; border-color: Theme.line;
+        TouchArea { }
+        ScrollView { dialog := VerticalLayout { padding: root.popup-menu ? 8px : 20px; spacing: root.popup-menu ? 0px : 16px;
+            if !root.popup-menu: Label { text: root.dialog-kind == 1 ? Theme.t("Удалить из библиотеки?", "Remove from library?") : root.dialog-kind == 2 ? Theme.t("Редактировать книгу", "Edit book") : root.dialog-kind == 3 ? Theme.t("Перейти ко времени", "Go to time") : root.dialog-kind == 5 ? Theme.t("Обновить источник", "Update source") : root.dialog-kind == 6 ? Theme.t("Скорость воспроизведения", "Playback speed") : root.dialog-kind == 7 ? Theme.t("Громкость", "Volume") : root.dialog-kind == 9 ? Theme.t("Сортировка", "Sort by") : root.dialog-kind == 10 ? Theme.t("Оформление", "Appearance") : root.dialog-kind == 11 ? Theme.t("Язык", "Language") : root.dialog-kind == 8 ? Theme.t("Воспроизведение", "Playback") : Theme.t("Трей недоступен", "Tray unavailable"); font-size: (22px) * Theme.font-scale; font-weight: 600; wrap: word-wrap; }
+            if root.navigation-menu: VerticalLayout { spacing: 4px;
+                Action { text: Theme.t("Библиотека", "Library"); icon: @image-url("../icons/book.svg"); fill: true; quiet: true; selected: State.page == 0 || State.page == 1; clicked => { State.navigate(0); root.dismiss(); } }
+                Action { text: Theme.t("Источники", "Sources"); icon: @image-url("../icons/folder.svg"); fill: true; quiet: true; selected: State.page == 4; clicked => { State.navigate(4); root.dismiss(); } }
+                Action { text: Theme.t("Настройки", "Settings"); icon: @image-url("../icons/settings.svg"); fill: true; quiet: true; selected: State.page == 3; clicked => { State.navigate(3); root.dismiss(); } }
+                Action { text: Theme.t("О программе", "About"); icon: @image-url("../icons/info.svg"); fill: true; quiet: true; selected: State.page == 5; clicked => { State.navigate(5); root.dismiss(); } }
+            }
+            if root.dialog-kind == 9: VerticalLayout { spacing: 6px;
+                for label[index] in State.sort-labels: Rectangle {
+                    height: State.filter == 2 && index == 0 ? 0px : Theme.action-height;
+                    if State.filter != 2 || index > 0: Action { text: label; fill: true; quiet: true; selected: index == (State.filter == 2 ? State.completed-sort-index + 1 : State.sort-index); clicked => { State.sort-index = index; State.settings-changed(); State.overlay = 0; } }
+                }
+            }
+            if root.dialog-kind == 10 || root.dialog-kind == 11: VerticalLayout { spacing: 6px;
+                for label[index] in (root.dialog-kind == 10 ? State.theme-labels : State.language-labels): Action {
+                    text: label; fill: true; selected: index == (root.dialog-kind == 10 ? State.theme-index : State.language-index);
+                    clicked => { if (root.dialog-kind == 10) { State.theme-index = index; } else { State.language-index = index; } State.settings-changed(); State.overlay = 0; }
+                }
+            }
+            if root.dialog-kind == 7: VerticalLayout { spacing: 12px;
+                Label { text: round(State.volume * 100) + "%"; horizontal-alignment: center; font-size: (26px) * Theme.font-scale; }
+                SeekBar { value <=> State.volume; step: 0.05; label: Theme.t("Громкость", "Volume"); changed(v) => { State.set-volume(v); } }
+                HorizontalLayout { spacing: 12px;
+                    Action { text: "−"; accessible-label: Theme.t("Тише", "Lower volume"); clicked => { State.set-volume(max(0, State.volume - 0.05)); } }
+                    Action { fill: true; centered: true; icon: State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg"); text: State.muted ? Theme.t("Включить звук", "Unmute") : Theme.t("Без звука", "Mute"); selected: State.muted; clicked => { State.action("mute", ""); } }
+                    Action { text: "+"; accessible-label: Theme.t("Громче", "Raise volume"); clicked => { State.set-volume(min(1, State.volume + 0.05)); } }
+                }
+            }
+            if root.dialog-kind == 8: VerticalLayout { spacing: 12px;
+                Label { text: State.current.title; wrap: word-wrap; }
+                Transport { }
+                MobileTimeline { }
+            }
+            if root.dialog-kind == 6: VerticalLayout { spacing: State.android ? 20px : 12px;
+                HorizontalLayout { spacing: 12px;
+                    Action { text: "−"; accessible-label: Theme.t("Медленнее", "Slower"); enabled: State.rate > 0.5; clicked => { State.action("rate-down", ""); } }
+                    Label { text: round(State.rate * 100) / 100 + "×"; font-size: (26px) * Theme.font-scale; font-weight: 600; horizontal-alignment: center; }
+                    Action { text: "+"; accessible-label: Theme.t("Быстрее", "Faster"); enabled: State.rate < 3; clicked => { State.action("rate-up", ""); } }
+                }
+                if State.android: SeekBar {
+                    value: (State.rate - 0.5) / 2.5; step: 0.02;
+                    label: Theme.t("Скорость воспроизведения", "Playback speed");
+                    changed(v) => { State.set-rate(round((0.5 + v * 2.5) * 20) / 20); }
+                }
+                HorizontalLayout { spacing: 8px;
+                    for rate in [1, 1.5, 2]: Action { fill: State.android; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001; clicked => { State.set-rate(rate); } }
+                }
+                if !State.android: Label { text: Theme.t("От 0,5× до 3× · шаг 0,05×", "0.5× to 3× · step 0.05×"); color: Theme.muted; wrap: word-wrap; horizontal-alignment: center; }
+            }
+            if root.dialog-kind == 1: Label { text: Theme.t("Исходные аудиофайлы останутся на месте. Прогресс этой записи будет удалён.", "Original audio files will stay untouched. Progress for this entry will be removed."); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 2: Field { text <=> State.edit-title; placeholder: Theme.t("Название", "Title"); }
+            if root.dialog-kind == 2: Field { text <=> State.edit-author; placeholder: Theme.t("Автор", "Author"); }
+            if root.dialog-kind == 2 && State.android: HorizontalLayout { alignment: center;
+                Cover { source: State.edit-cover; initials: ""; width: 60px; height: 80px; }
+            }
+            if root.dialog-kind == 2: HorizontalLayout { spacing: 16px;
+                if !State.android: Cover { source: State.edit-cover; initials: ""; width: 72px; height: 96px; }
+                VerticalLayout { spacing: 8px; alignment: center;
+                    HorizontalLayout { alignment: start; Action { text: State.cover-loading || State.picker-busy ? Theme.t("Открываем…", "Opening…") : Theme.t("Выбрать обложку", "Choose cover"); icon: @image-url("../icons/folder.svg"); enabled: !State.cover-loading && !State.picker-busy; clicked => { State.choose-cover(); } } }
+                    HorizontalLayout { alignment: start; Action { text: Theme.t("Из аудиофайлов", "From audio files"); quiet: true; clicked => { State.action("reset-cover", ""); } } }
+                    Label { text: "PNG · JPEG"; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+                }
+            }
+            if root.dialog-kind == 2 && State.edit-cover-error != "": Label { text: State.edit-cover-error; wrap: word-wrap; color: Theme.danger; font-size: (12px) * Theme.font-scale; }
+            if root.dialog-kind == 2: HorizontalLayout { alignment: start; Action { text: Theme.t("Порядок частей", "Part order"); clicked => { State.overlay = 0; State.action("open-book", State.edit-key); State.reorder = true; State.contents = true; } } }
+            if root.dialog-kind == 3: Label { text: Theme.t("Время текущей части: мм:сс или чч:мм:сс", "Time in this part: mm:ss or hh:mm:ss"); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 3: Field { text <=> State.exact-time; placeholder: "00:00"; accepted(s) => { State.action("exact-time", s); } }
+            if root.dialog-kind == 5: HorizontalLayout { spacing: 8px;
+                Field { text <=> State.relocate-path; read-only: State.source-busy || State.android; placeholder: Theme.t("Путь к папке", "Folder path"); }
+                Action { icon: @image-url("../icons/folder.svg"); enabled: !State.source-busy && !State.picker-busy; accessible-label: Theme.t("Выбрать папку источника", "Choose source folder"); clicked => { State.choose-source-folder(); } }
+            }
+            if root.dialog-kind == 5: Label { text: Theme.t("Найдём новые книги и обновим сведения. Если папка перемещена, выберите её новое расположение — прогресс сохранится.", "Find new books and refresh their details. If the folder moved, choose its new location — listening progress is kept."); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 5 && State.source-error != "": Label { text: State.source-error; wrap: word-wrap; color: Theme.danger; font-size: (12px) * Theme.font-scale; }
+            if root.dialog-kind == 4: Label { text: Theme.t("Сейчас нет панели, из которой можно вернуть окно.", "There is no tray host to bring the window back."); wrap: word-wrap; color: Theme.muted; }
+            if !root.popup-menu: HorizontalLayout { spacing: 8px; alignment: State.android && root.dialog-kind >= 6 ? stretch : end;
+                // Android keeps preedit outside edit-title until Action takes
+                // focus. Allow Done to commit it; the controller validates the
+                // resulting title before saving.
+                if root.dialog-kind < 6: Action { text: root.dialog-kind == 4 ? Theme.t("Оставить", "Keep open") : root.dialog-kind == 5 && State.source-busy ? Theme.t("Закрыть", "Close") : Theme.t("Отмена", "Cancel"); clicked => { State.overlay = 0; } }
+                Action { fill: State.android && root.dialog-kind >= 6; centered: true; text: root.dialog-kind == 1 ? Theme.t("Удалить", "Remove") : root.dialog-kind == 4 ? Theme.t("Выйти", "Quit") : root.dialog-kind == 5 ? (State.source-busy ? Theme.t("Обновляем…", "Updating…") : Theme.t("Обновить", "Update")) : Theme.t("Готово", "Done"); primary: true; enabled: (root.dialog-kind != 2 || (!State.cover-loading && (State.android || State.edit-title != ""))) && (root.dialog-kind != 5 || (!State.source-busy && State.relocate-path != "")); clicked => {
+                    if (root.dialog-kind == 1) { State.action("remove-" + State.remove-kind, State.remove-key); State.overlay = 0; }
+                    else if (root.dialog-kind == 2) { State.action("edit", ""); }
+                    else if (root.dialog-kind == 3) { State.action("exact-time", State.exact-time); }
+                    else if (root.dialog-kind == 5) { State.source-error = ""; State.action("update-source", State.relocate-key); }
+                    else if (root.dialog-kind >= 6) { root.dismiss(); }
+                    else { State.action("quit", ""); }
+                } }
+            }
+        } }
+    }
+    }
+}

@@ -1,0 +1,50 @@
+export global Theme {
+    in-out property <bool> touch: false;
+    in-out property <float> font-scale: 1;
+    callback haptic(string);
+    out property <length> action-height: max(touch ? 48px : 38px, body + 20px);
+    in-out property <bool> dark: true;
+    in-out property <bool> english: false;
+    in-out property <bool> reduced-motion: false;
+    out property <duration> motion: reduced-motion ? 0ms : 150ms;
+    out property <duration> page-motion: reduced-motion ? 0ms : 220ms;
+    out property <color> book-accent-dark: #c2c2c2;
+    out property <color> book-accent-light: #525252;
+    private property <color> from-dark: #c2c2c2;
+    private property <color> from-light: #525252;
+    private property <duration> transition-start;
+    out property <bool> transitioning: false;
+    private property <float> transition-progress: !transitioning || reduced-motion ? 1 : clamp((animation-tick() - transition-start) / 650ms, 0, 1);
+    private property <float> transition-eased: transition-progress * transition-progress * (3 - 2 * transition-progress);
+    // Every painted color observes the same frame clock, without change
+    // callbacks or a second animation chasing an already animated accent.
+    out property <color> accent-dark: book-accent-dark.mix(from-dark, transition-eased);
+    out property <color> accent-light: book-accent-light.mix(from-light, transition-eased);
+    out property <duration> control-motion: transitioning ? 0ms : motion;
+    public function set-book-colors(dark-color: color, light-color: color) {
+        if (book-accent-dark == dark-color && book-accent-light == light-color) { return; }
+        let current-dark = accent-dark;
+        let current-light = accent-light;
+        from-dark = current-dark;
+        from-light = current-light;
+        book-accent-dark = dark-color;
+        book-accent-light = light-color;
+        transition-start = animation-tick();
+        transitioning = !reduced-motion;
+    }
+    public function finish-transition() {
+        if (transition-progress >= 1) { transitioning = false; }
+    }
+    out property <color> accent: dark ? accent-dark : accent-light;
+    out property <color> background: dark ? #191a1b.mix(accent, 97%) : #f5f4f2.mix(accent, 98%);
+    out property <color> surface: dark ? #232426.mix(accent, 98%) : #ffffff;
+    out property <color> raised: dark ? #2d2e30.mix(accent, 96%) : #eae9e7.mix(accent, 97%);
+    out property <color> line: dark ? #3d3e40.mix(accent, 96%) : #dcdad7.mix(accent, 97%);
+    out property <color> text: dark ? #efefee : #292a2c;
+    out property <color> muted: dark ? #abadb0 : #626366;
+    out property <color> on-accent: dark ? #202123 : #ffffff;
+    out property <color> tint: dark ? #232426.mix(accent, 88%) : #ffffff.mix(accent, 90%);
+    out property <color> danger: dark ? #efaa9a : #ab392d;
+    out property <length> body: 14px * font-scale;
+    public pure function t(ru: string, en: string) -> string { return english ? en : ru; }
+}

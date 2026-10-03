@@ -1,0 +1,169 @@
+import { State, BookItem } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action, Label, SeekBar, Cover, Meter } from "controls.slint";
+
+struct PlayerInfo {
+    book: BookItem,
+    active: bool,
+    part-title: string,
+    position-text: string,
+    duration-text: string,
+    position: float,
+    seekable: bool,
+}
+
+component BookIdentity inherits Rectangle {
+    in property <PlayerInfo> info;
+    background: Theme.surface;
+    HorizontalLayout { spacing: 12px;
+        if !State.compact: Cover { source: root.info.book.cover; initials: root.info.book.initials; variant: root.info.book.variant; width: 34px; height: 44px; }
+        VerticalLayout { spacing: 3px; alignment: center;
+            Label { text: root.info.active ? root.info.book.title : Theme.t("Выберите историю", "Choose a story"); font-weight: 600; }
+            if !State.compact: Label { text: root.info.active ? root.info.part-title : Theme.t("Она ждёт в библиотеке", "Your library is waiting"); color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+        }
+    }
+}
+
+component FadingLabel inherits Rectangle {
+    in property <string> text;
+    in property <string> previous-text;
+    in property <float> previous-opacity;
+    in property <length> font-size: (11px) * Theme.font-scale;
+    in property <int> font-weight: 400;
+    in property <TextHorizontalAlignment> horizontal-alignment: left;
+    Label { x: 0px; y: 0px; width: parent.width; height: parent.height; text: root.text; font-size: root.font-size; font-weight: root.font-weight; horizontal-alignment: root.horizontal-alignment; }
+    // Fade an opaque old frame over the new one, so the content never goes blank.
+    if root.previous-opacity > 0: Rectangle {
+        background: Theme.surface; opacity: root.previous-opacity;
+        Label { x: 0px; y: 0px; width: parent.width; height: parent.height; text: root.previous-text; font-size: root.font-size; font-weight: root.font-weight; horizontal-alignment: root.horizontal-alignment; }
+    }
+}
+export component Transport inherits HorizontalLayout {
+    alignment: center; spacing: 4px;
+    Action { icon: @image-url("../icons/previous.svg"); enabled: State.previous-enabled; accessible-label: Theme.t("Предыдущая часть", "Previous part"); quiet: true; clicked => { State.action("previous", ""); } }
+    Action { icon: @image-url("../icons/rewind.svg"); text: State.compact ? "" : "−" + State.seek-step; enabled: State.seekable; visual-enabled: State.seek-controls-lit; quiet: true; accessible-label: Theme.t("Назад на 10 секунд", "Back 10 seconds"); clicked => { State.action("back", ""); } }
+    Action { icon: State.playing ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg"); primary: true; enabled: State.active; accessible-label: State.playing ? Theme.t("Пауза", "Pause") : Theme.t("Воспроизвести", "Play"); clicked => { State.action("toggle", ""); } }
+    Action { icon: @image-url("../icons/forward.svg"); text: State.compact ? "" : "+" + State.seek-step; enabled: State.seekable; visual-enabled: State.seek-controls-lit; quiet: true; accessible-label: Theme.t("Вперёд на 10 секунд", "Forward 10 seconds"); clicked => { State.action("forward", ""); } }
+    Action { icon: @image-url("../icons/next.svg"); enabled: State.next-enabled; accessible-label: Theme.t("Следующая часть", "Next part"); quiet: true; clicked => { State.action("next", ""); } }
+}
+
+export component MobileTimeline inherits HorizontalLayout {
+    spacing: 8px;
+    Label { text: State.position-text; font-size: (11px) * Theme.font-scale; horizontal-stretch: 0; }
+    SeekBar { value <=> State.position; enabled: State.seekable; visual-enabled: State.seek-controls-lit;
+        label: Theme.t("Позиция в части", "Position in part");
+        step: State.duration-ms > 0 ? min(1, 5000 / State.duration-ms) : 0.02;
+        changed(v) => { State.seek(v); }
+    }
+    Label { text: State.duration-text; font-size: (11px) * Theme.font-scale; horizontal-stretch: 0; }
+    Action { icon: @image-url("../icons/clock.svg"); enabled: State.seekable; quiet: true;
+        accessible-label: Theme.t("Точное время", "Exact time");
+        clicked => { State.exact-time = State.position-text; State.overlay = 3; }
+    }
+}
+
+export component MobilePlayer inherits Rectangle {
+    height: State.short-screen ? Theme.action-height + 16px : Theme.action-height * 3 + 24px;
+    background: Theme.surface;
+    Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.line; }
+    VerticalLayout { padding: 8px; spacing: 4px;
+        HorizontalLayout { spacing: 4px;
+            Rectangle {
+                horizontal-stretch: 1;
+                VerticalLayout { alignment: center; spacing: 2px;
+                    Label { text: State.active ? State.current.title : Theme.t("Выберите историю", "Choose a story"); font-weight: 600; }
+                    if State.active: Label { text: State.part-title; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
+                }
+                TouchArea { clicked => { if (State.active) { Theme.haptic("button"); State.action("open-book", State.current.key); } } }
+            }
+            if State.short-screen: Action { icon: State.playing ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg"); primary: true; enabled: State.active; accessible-label: Theme.t("Слушать / пауза", "Play / pause"); clicked => { State.action("toggle", ""); } }
+            Action { icon: @image-url("../icons/volume.svg"); quiet: true; accessible-label: Theme.t("Громкость", "Volume"); clicked => { State.overlay = 7; } }
+            Action { text: round(State.rate * 100) / 100 + "×"; accessible-label: Theme.t("Скорость воспроизведения", "Playback speed"); clicked => { State.overlay = 6; } }
+            if State.short-screen: Action { icon: @image-url("../icons/more.svg"); quiet: true; accessible-label: Theme.t("Управление воспроизведением", "Playback controls"); clicked => { State.overlay = 8; } }
+        }
+        if !State.short-screen: Transport { }
+        if !State.short-screen: MobileTimeline { }
+    }
+}
+export component PlayerPanel inherits Rectangle {
+    in property <PlayerInfo> incoming: {
+        book: State.current, active: State.active, part-title: State.part-title,
+        position-text: State.position-text, duration-text: State.duration-text,
+        position: State.position, seekable: State.seek-controls-lit,
+    };
+    private property <PlayerInfo> shown;
+    private property <PlayerInfo> previous;
+    private property <bool> transitioning;
+    private property <duration> transition-start;
+    private property <float> progress: !transitioning || Theme.reduced-motion ? 1 : clamp((animation-tick() - transition-start) / 320ms, 0, 1);
+    private property <float> previous-opacity: 1 - progress * progress * (3 - 2 * progress);
+    in property <bool> reduced-motion: Theme.reduced-motion;
+    changed reduced-motion => { root.sync-content(); }
+    changed incoming => { root.sync-content(); }
+    init => { root.shown = root.incoming; }
+    function sync-content() {
+        if (root.reduced-motion) {
+            root.transitioning = false;
+            root.shown = root.incoming;
+            root.previous = root.incoming;
+            return;
+        }
+        // Finish the visible blend before showing the latest requested book.
+        // Rapid switches replace the pending target instead of flashing a full
+        // intermediate cover or replaying every skipped book.
+        // Slint's empty images compare unequal, even to themselves. Treat two
+        // missing covers as unchanged so progress updates cannot loop the fade.
+        let cover-changed = (root.incoming.book.cover.width > 0 || root.shown.book.cover.width > 0)
+            && root.incoming.book.cover != root.shown.book.cover;
+        let book-changed = root.incoming.book.key != root.shown.book.key || cover-changed;
+        if (root.transitioning && book-changed) { return; }
+        if (book-changed) {
+            root.previous = root.shown;
+            root.shown = root.incoming;
+            root.transition-start = animation-tick();
+            root.transitioning = true;
+        } else {
+            root.shown = root.incoming;
+        }
+    }
+    function finish-transition() {
+        root.transitioning = false;
+        root.sync-content();
+        if (!root.transitioning) { root.previous = root.shown; }
+    }
+    Timer { interval: 40ms; running: root.transitioning;
+        triggered => { if (root.progress >= 1) { root.finish-transition(); } }
+    }
+    height: State.compact ? max(38px, Theme.body + 20px) * 4 + 36px : max(44px, Theme.body + 12px + 6px) + max(38px, Theme.body + 20px) * 2 + 32px;
+    background: Theme.surface;
+    Rectangle { x: 0px; y: 0px; height: 1px; width: parent.width; background: Theme.line; }
+    VerticalLayout { padding: 12px; spacing: 4px;
+        HorizontalLayout { spacing: 12px; height: State.compact ? max(38px, Theme.body + 20px) : max(44px, Theme.body + 12px + 6px);
+            Rectangle { horizontal-stretch: 1; preferred-width: State.compact ? 180px : 226px;
+                BookIdentity { info: root.shown; }
+                if root.previous-opacity > 0: BookIdentity { info: root.previous; opacity: root.previous-opacity; }
+            }
+            if !State.compact: Transport { }
+            Action { icon: State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg"); quiet: true; accessible-label: Theme.t("Выключить / включить звук", "Mute / unmute"); clicked => { State.action("mute", ""); } }
+            VerticalLayout { width: State.compact ? 45px : 68px; alignment: center; SeekBar { value <=> State.volume; step: 0.05; label: Theme.t("Громкость", "Volume"); changed(v) => { State.set-volume(v); } } }
+        }
+        if State.compact: Transport { }
+        HorizontalLayout { spacing: 10px; height: max(38px, Theme.body + 20px);
+            FadingLabel { text: root.shown.position-text; previous-text: root.previous.position-text; previous-opacity: root.previous-opacity; width: 48px; }
+            VerticalLayout { horizontal-stretch: 1; alignment: center;
+                Rectangle { height: 24px;
+                    SeekBar { value <=> State.position; display-value: root.shown.position; step: State.duration-ms > 0 ? min(1, 5000 / State.duration-ms) : 0.02; enabled: State.seekable; visual-enabled: State.seek-controls-lit; label: Theme.t("Позиция в части", "Position in part"); changed(v) => { root.transitioning = false; root.shown = root.incoming; State.seek(v); } }
+                    if root.previous-opacity > 0: Rectangle { background: Theme.surface; opacity: root.previous-opacity;
+                        Meter { y: (parent.height - self.height) / 2; width: parent.width; value: root.previous.position; opacity: root.previous.seekable ? 1 : 0.4; }
+                    }
+                }
+            }
+            FadingLabel { text: root.shown.duration-text; previous-text: root.previous.duration-text; previous-opacity: root.previous-opacity; width: 48px; horizontal-alignment: right; }
+            Action { icon: @image-url("../icons/clock.svg"); enabled: State.seekable; visual-enabled: State.seek-controls-lit; quiet: true; accessible-label: Theme.t("Точное время", "Exact time"); clicked => { State.exact-time = State.position-text; State.overlay = 3; } }
+        }
+        HorizontalLayout { spacing: 12px; height: max(38px, Theme.body + 20px);
+            FadingLabel { text: root.shown.active ? Theme.t("Прогресс", "Progress") + " " + root.shown.book.detail : ""; previous-text: root.previous.active ? Theme.t("Прогресс", "Progress") + " " + root.previous.book.detail : ""; previous-opacity: root.previous-opacity; horizontal-stretch: 1; font-size: (14px) * Theme.font-scale; font-weight: 600; }
+            Action { text: round(State.rate * 100) / 100 + "×"; accessible-label: Theme.t("Скорость воспроизведения: ", "Playback speed: ") + self.text; clicked => { State.overlay = 6; } }
+        }
+    }
+}

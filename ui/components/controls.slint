@@ -1,0 +1,187 @@
+import { Theme } from "theme.slint";
+import { Spinner } from "std-widgets.slint";
+
+export component Label inherits Text {
+    horizontal-stretch: 1;
+    color: Theme.text;
+    font-size: Theme.body;
+    overflow: elide;
+    vertical-alignment: center;
+}
+
+export component PlaybackIndicator inherits Rectangle {
+    in property <bool> playing;
+    in property <bool> animation-enabled: true;
+    private property <float> tick: playing && animation-enabled && !Theme.reduced-motion ? animation-tick() / 1ms : 0;
+    width: 16px; height: 18px;
+    for i in 3: Rectangle {
+        x: i * 6px; width: 3px;
+        height: !root.playing ? 3px : 5px + (0.5 + 0.5 * sin(root.tick / (720 + i * 130) * 360deg + i * 120deg)) * 11px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 1.5px;
+        background: Theme.accent;
+    }
+}
+
+export component BusyStatus inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 8px;
+    Rectangle {
+        width: 24px;
+        Spinner {
+            x: 0px; y: (parent.height - self.height) / 2;
+            width: 24px; height: 24px;
+            indeterminate: !Theme.reduced-motion;
+            progress: 0.75;
+            accessible-label: root.text;
+        }
+    }
+    Label { text: root.text; color: Theme.muted; wrap: word-wrap; }
+}
+
+export component PageFrame inherits Rectangle {
+    in property <bool> active;
+    opacity: active ? 1 : 0;
+    visible: active || self.opacity > 0;
+    animate opacity { duration: Theme.page-motion; easing: ease-out; }
+    FocusScope {
+        enabled: root.active;
+        y: (1 - root.opacity) * 10px;
+        width: parent.width; height: parent.height;
+        @children
+    }
+    // A departing page stays visible during the fade, but cannot be clicked.
+    if !root.active: TouchArea { }
+}
+
+export component Action inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> primary: false;
+    in property <bool> selected: false;
+    in property <bool> quiet: false;
+    in property <bool> enabled: true;
+    // A containing control can provide a touch area that also recognizes gestures.
+    in property <bool> custom-touch: false;
+    in property <bool> custom-pressed: false;
+    private property <bool> pressed: custom-touch ? custom-pressed : touch.pressed;
+    // Loading can temporarily block input without dimming a working control.
+    in property <bool> visual-enabled: enabled;
+    in property <bool> fill: false;
+    in property <bool> centered: !fill;
+    in property <bool> destructive: false;
+    private property <color> foreground: primary ? Theme.on-accent : destructive ? Theme.danger : selected ? Theme.accent : Theme.text;
+    in property <int> font-weight: primary ? 600 : 400;
+    callback clicked;
+    public function activate() { focus.focus(); Theme.haptic("button"); root.clicked(); }
+    height: Theme.action-height;
+    horizontal-stretch: fill ? 1 : 0;
+    min-width: icon.width > 0 ? (Theme.touch ? 48px : 40px) : 60px;
+    preferred-width: max(40px, row.preferred-width);
+    states [
+        fitted when !root.fill: { max-width: max(root.min-width, root.preferred-width); }
+    ]
+    border-radius: 9px;
+    border-width: !Theme.touch && focus.has-focus ? 2px : 1px;
+    border-color: !Theme.touch && focus.has-focus ? Theme.accent : primary || selected || quiet ? transparent : Theme.line;
+    background: !visual-enabled ? Theme.surface : primary ? (pressed ? Theme.accent.darker(12%) : touch.has-hover ? Theme.accent.brighter(8%) : Theme.accent) : selected ? Theme.tint : pressed ? Theme.line : touch.has-hover ? Theme.raised : quiet ? transparent : Theme.surface;
+    opacity: visual-enabled ? 1 : 0.45;
+    animate background { duration: Theme.control-motion; }
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (root.enabled) { root.activate(); } }
+    row := HorizontalLayout {
+        padding-left: 12px; padding-right: 12px; spacing: 8px; alignment: root.centered ? center : start;
+        if root.icon.width > 0: Rectangle { width: 19px; Image { source: root.icon; colorize: root.foreground; width: 19px; height: 19px; y: (parent.height - self.height) / 2; } }
+        if root.text != "": Label { text: root.text; color: root.foreground; font-weight: root.font-weight; }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || event.text == Key.Return) { root.activate(); return accept; }
+            return reject;
+        }
+    }
+    touch := TouchArea { enabled: root.enabled && !root.custom-touch; mouse-cursor: pointer;
+        clicked => { root.activate(); }
+    }
+}
+
+export component Field inherits Rectangle {
+    in-out property <string> text;
+    in property <bool> read-only: false;
+    in property <string> placeholder;
+    in property <string> label: placeholder;
+    callback edited(string);
+    callback accepted(string);
+    forward-focus: input;
+    height: max(Theme.touch ? 48px : 42px, Theme.body + 22px);
+    border-radius: 9px;
+    background: Theme.surface;
+    border-color: input.has-focus ? Theme.accent : Theme.line;
+    border-width: input.has-focus ? 2px : 1px;
+    TouchArea { enabled: !root.read-only; clicked => { input.focus(); } }
+    input := TextInput {
+        x: 13px; y: 8px; width: parent.width - 26px; height: parent.height - 16px;
+        text <=> root.text;
+        read-only: root.read-only;
+        font-size: Theme.body;
+        color: Theme.text;
+        selection-background-color: Theme.accent;
+        selection-foreground-color: Theme.on-accent;
+        single-line: true;
+        vertical-alignment: center;
+        accessible-label: root.label;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(self.text); }
+    }
+    if root.text == "" && input.preedit-text == "": Label { x: 13px; y: 8px; width: parent.width - 26px; height: parent.height - 16px; text: root.placeholder; color: Theme.muted; }
+}
+
+export component Toggle inherits Rectangle {
+    in property <string> text;
+    in property <string> description;
+    in-out property <bool> checked;
+    callback toggled;
+    height: max(Theme.touch ? 48px : 38px, caption.preferred-height + 12px);
+    min-width: Theme.touch ? 48px : 32px;
+    border-radius: 8px;
+    border-width: !Theme.touch && focus.has-focus ? 2px : 0px;
+    border-color: Theme.accent;
+    background: touch.has-hover ? Theme.raised : transparent;
+    animate background { duration: Theme.control-motion; }
+    accessible-role: checkbox;
+    accessible-label: text;
+    accessible-checked: checked;
+    accessible-action-default => { root.checked = !root.checked; Theme.haptic("button"); root.toggled(); }
+    HorizontalLayout { padding: 6px; spacing: 10px;
+        Rectangle { width: 20px; Rectangle { y: (parent.height - self.height) / 2; width: 20px; height: 20px; border-radius: 5px; border-width: 1px; border-color: root.checked ? Theme.accent : Theme.muted; background: root.checked ? Theme.accent : transparent;
+            if root.checked: Image { x: 2px; y: 2px; width: 16px; height: 16px; source: @image-url("../icons/check.svg"); colorize: Theme.on-accent; }
+        } }
+        caption := VerticalLayout { spacing: 4px; alignment: center;
+            Label { text: root.text; wrap: word-wrap; }
+            if root.description != "": Label { text: root.description; wrap: word-wrap; font-size: (12px) * Theme.font-scale; color: Theme.muted; }
+        }
+    }
+    focus := FocusScope { key-pressed(e) => { if (e.text == " " || e.text == Key.Return) { root.checked = !root.checked; Theme.haptic("button"); root.toggled(); return accept; } return reject; } }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { focus.focus(); root.checked = !root.checked; Theme.haptic("button"); root.toggled(); } }
+}
+
+export { Meter, PercentSlider, SeekBar } from "sliders.slint";
+
+export component Cover inherits Rectangle {
+    in property <image> source;
+    in property <int> variant;
+    in property <string> initials: "C";
+    border-radius: 8px;
+    background: variant == 1 ? #624b42 : variant == 2 ? #405868 : variant == 3 ? #5b5740 : #465c4d;
+    clip: true;
+    if source.width == 0: Rectangle {
+        x: parent.width * 0.12; y: parent.height * 0.12; width: parent.width * 0.76; height: parent.height * 0.76;
+        border-width: 1px; border-color: #ffffff35; border-radius: 2px;
+        Text { text: root.initials; font-size: (min(38px, root.width * 0.35)) * Theme.font-scale; font-family: "serif"; color: #f0ecd9; horizontal-alignment: center; vertical-alignment: center; }
+        Rectangle { x: parent.width * 0.25; y: parent.height * 0.79; width: parent.width * 0.5; height: 1px; background: #ffffff55; }
+    }
+    if source.width > 0: Image { source: root.source; image-fit: cover; }
+}

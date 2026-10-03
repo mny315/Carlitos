@@ -1,0 +1,112 @@
+[package]
+name = "carlitos"
+version = "1.0.1"
+edition = "2024"
+autotests = false
+rust-version = "1.92"
+description = "A calm, local audiobook player for Linux, Windows and Android"
+authors = ["mny315"]
+license = "MIT"
+repository = "https://github.com/mny315/Carlitos"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+android-import-tests = []
+android-playback-tests = []
+android-ui-tests = ["android-playback-tests", "dep:i-slint-backend-testing"]
+
+[dependencies]
+anyhow = "1.0"
+async-channel = "2.5"
+rusqlite = { version = "0.38", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+url = "2.5"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+mp4ameta = "0.13"
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-18"] }
+futures-lite = "2.6"
+tempfile = "3"
+dunce = "1.0"
+
+[target.'cfg(any(target_os = "linux", windows))'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["backend-winit", "renderer-femtovg", "renderer-software", "accessibility", "raw-window-handle-06", "unstable-winit-030"] }
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06"] }
+i-slint-backend-android-activity = { version = "=1.18.1", default-features = false }
+jni = "=0.21.1"
+i-slint-backend-testing = { version = "=1.18.1", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gst = { package = "gstreamer", version = "0.25", features = ["v1_22"] }
+gst_pbutils = { package = "gstreamer-pbutils", version = "0.25", features = ["v1_22"] }
+zbus = { version = "5.19", features = ["blocking-api"] }
+ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"] }
+ashpd = { version = "0.12", default-features = false, features = ["async-std", "raw_handle", "wayland"] }
+
+[target.'cfg(any(windows, target_os = "android"))'.dependencies]
+lofty = "0.25"
+
+[dev-dependencies]
+lofty = "0.25"
+
+[target.'cfg(windows)'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["unstable-fontique-011"] }
+async-io = "2.6"
+rfd = { version = "0.17", default-features = false }
+windows = { version = "0.62", features = [
+    "Foundation", "Media", "Storage_Streams",
+    "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Media_Audio_XAudio2",
+    "Win32_Media_MediaFoundation", "Win32_Storage_FileSystem",
+    "Win32_System_Com_StructuredStorage", "Win32_System_LibraryLoader",
+    "Win32_System_SystemServices", "Win32_System_Variant", "Win32_System_WinRT", "Win32_System_WinRT_Media",
+    "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+serde_json = "1.0"
+slint-build = "=1.18.1"
+cc = "1.2"
+resvg = { version = "0.48", default-features = false }
+
+[profile.dev]
+debug = 0
+
+# The Android debug APK is also used on devices. Unoptimized Slint layout and
+# rendering cannot keep up with high-refresh displays; retain development checks.
+[profile.android]
+inherits = "dev"
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[patch.crates-io]
+mp4ameta = { path = "vendor/mp4ameta" }
+i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }
+i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
+
+[[test]]
+name = "folder_import"
+path = "tests/integration/folder_import.rs"
+
+[[test]]
+name = "media_integration"
+path = "tests/integration/media_integration.rs"
+
+[[test]]
+name = "silence_playback"
+path = "tests/integration/silence_playback.rs"
+
+[[test]]
+name = "windows_import"
+path = "tests/integration/windows_import.rs"
+
+[[test]]
+name = "windows_playback"
+path = "tests/integration/windows_playback.rs"

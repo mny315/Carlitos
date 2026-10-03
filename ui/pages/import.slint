@@ -1,0 +1,58 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "../components/theme.slint";
+import { Action, Label, Field, Toggle, BusyStatus } from "../components/controls.slint";
+component ImportSetup inherits VerticalLayout {
+    spacing: 12px;
+    Label { text: Theme.t("Выберите папку и проверьте состав перед импортом", "Choose a folder, then review its contents"); color: Theme.muted; wrap: word-wrap; }
+    if State.android: Action { text: State.import-folder-label; icon: @image-url("../icons/folder.svg"); fill: true; enabled: !State.picker-busy; clicked => { State.choose-folder(); } }
+    if !State.android: HorizontalLayout { spacing: 8px; Field { text <=> State.import-path; placeholder: Theme.t("Путь к папке", "Folder path"); horizontal-stretch: 1; } Action { icon: @image-url("../icons/folder.svg"); accessible-label: Theme.t("Выбрать папку", "Choose folder"); enabled: !State.picker-busy; clicked => { State.choose-folder(); } } }
+    Toggle { text: Theme.t("Объединить папку в одну книгу", "Treat this folder as one book"); checked <=> State.single-book; }
+    HorizontalLayout { spacing: 8px;
+        Action { text: State.scanning ? Theme.t("Отменить", "Cancel") : Theme.t("Найти книги", "Find books"); primary: !State.scanning; clicked => { State.action(State.scanning ? "cancel-scan" : "scan", State.import-path); } }
+        if State.scanning: BusyStatus { text: State.scan-status; }
+        if !State.scanning: Label { text: State.scan-status; color: Theme.muted; }
+    }
+    Rectangle { vertical-stretch: 1; min-height: 8px; }
+}
+export component ImportPage inherits VerticalLayout {
+    spacing: 8px;
+    HorizontalLayout { Label { text: Theme.t("Добавить книги", "Add books"); font-size: (26px) * Theme.font-scale; font-weight: 650; } Action { icon: @image-url("../icons/close.svg"); quiet: true; accessible-label: Theme.t("Закрыть импорт", "Close import"); clicked => { State.action("cancel-scan", ""); State.navigate(0); } } }
+    if State.android && State.drafts.length == 0: HorizontalLayout {
+        alignment: start;
+        Action { text: Theme.t("Выбрать файл", "Choose file"); clicked => { State.action("pick-file", ""); } }
+    }
+    if State.drafts.length == 0: ScrollView { ImportSetup { padding-right: 8px; } }
+    if State.drafts.length > 0 && State.selected-draft < 0: HorizontalLayout { spacing: 8px;
+        Action { icon: @image-url("../icons/back.svg"); accessible-label: Theme.t("Другая папка", "Choose another folder"); clicked => { State.action("cancel-scan", ""); } }
+        Label { text: State.import-folder-label; color: Theme.muted; }
+        Action { text: Theme.t("Добавить", "Import"); primary: true; enabled: !State.scanning; clicked => { State.action("import", ""); } }
+    }
+    if State.import-issues != "": ScrollView { height: min(64px, issue.preferred-height + 8px); issue := Label { text: State.import-issues; color: Theme.danger; wrap: word-wrap; } }
+    if State.drafts.length > 0 && State.selected-draft < 0: ListView {
+        for draft[idx] in State.drafts: Rectangle {
+            height: max(96px, Theme.body * 3 + 36px); background: Theme.surface; border-radius: 8px;
+            HorizontalLayout { padding: 10px; spacing: 8px;
+                Toggle { width: State.android ? 48px : 32px; accessible-label: draft.title; checked: draft.included; toggled => { State.draft-changed(idx, draft.title, draft.author, self.checked); } }
+                VerticalLayout { spacing: 4px;
+                    Label { text: draft.title; font-weight: 600; }
+                    Label { text: draft.author; color: Theme.muted; }
+                    Label { text: draft.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+                }
+                Action { icon: @image-url("../icons/more.svg"); accessible-label: Theme.t("Проверить части", "Review parts"); clicked => { State.selected-draft = idx; State.action("draft", idx); } }
+            }
+        }
+    }
+    if State.selected-draft >= 0: VerticalLayout {
+        spacing: 8px;
+        HorizontalLayout { spacing: 8px; Action { icon: @image-url("../icons/back.svg"); accessible-label: Theme.t("К списку книг", "Back to books"); clicked => { State.selected-draft = -1; } } Field { text <=> State.draft-title; placeholder: Theme.t("Название", "Title"); edited(s) => { State.draft-changed(State.selected-draft, s, State.draft-author, true); } } }
+        Field { text <=> State.draft-author; placeholder: Theme.t("Автор", "Author"); edited(s) => { State.draft-changed(State.selected-draft, State.draft-title, s, true); } }
+        ListView { for part[idx] in State.draft-files: HorizontalLayout {
+            height: max(48px, Theme.body + 24px); spacing: 4px;
+            Label { text: part.title; }
+            Action { icon: @image-url("../icons/up.svg"); accessible-label: Theme.t("Выше", "Move up"); enabled: idx > 0; quiet: true; clicked => { State.draft-file-action(idx, "up"); } }
+            Action { icon: @image-url("../icons/down.svg"); accessible-label: Theme.t("Ниже", "Move down"); enabled: idx + 1 < State.draft-files.length; quiet: true; clicked => { State.draft-file-action(idx, "down"); } }
+            Action { icon: @image-url("../icons/close.svg"); accessible-label: Theme.t("Исключить файл", "Exclude file"); quiet: true; clicked => { State.draft-file-action(idx, "remove"); } }
+        } }
+    }
+}

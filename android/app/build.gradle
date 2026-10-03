@@ -1,0 +1,90 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def versions = new groovy.json.JsonSlurper().parse(rootProject.file('../nix/android-versions.json'))
+def playbackTests = System.getenv('CARLITOS_ANDROID_PLAYBACK_TESTS') == '1'
+def appVersion = (rootProject.file('../Cargo.toml').text =~ /(?m)^version = "([^"]+)"/)[0][1]
+def signingFile = rootProject.file('../.secrets/android/signing.properties')
+def releaseKey = new Properties()
+if (signingFile.isFile()) signingFile.withInputStream { releaseKey.load(it) }
+android {
+    namespace 'io.github.mny315.carlitos'
+    compileSdk versions.compileSdk
+    buildToolsVersion versions.buildTools
+    ndkVersion versions.ndk
+
+    defaultConfig {
+        applicationId 'io.github.mny315.carlitos'
+        if (playbackTests) applicationIdSuffix '.playbacktest'
+        resValue 'string', 'app_name', playbackTests ? 'Carlitos Test' : 'Carlitos'
+        testApplicationId 'io.github.mny315.carlitos.test'
+        testInstrumentationRunner 'io.github.mny315.carlitos.DeviceInstrumentation'
+        minSdk versions.minSdk
+        targetSdk versions.targetSdk
+        versionCode 9
+        versionName appVersion
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+    }
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk true
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    signingConfigs {
+        release {
+            if (signingFile.isFile()) {
+                storeFile new File(signingFile.parentFile, releaseKey.getProperty('storeFile'))
+                storePassword releaseKey.getProperty('storePassword')
+                keyAlias releaseKey.getProperty('keyAlias')
+                keyPassword releaseKey.getProperty('keyPassword')
+                storeType 'PKCS12'
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            debuggable false
+        }
+    }
+    sourceSets.debug.jniLibs.srcDirs = [layout.buildDirectory.dir('rust/debug/jniLibs')]
+    sourceSets.release.jniLibs.srcDirs = [layout.buildDirectory.dir('rust/release/jniLibs')]
+    sourceSets.androidTest.java.srcDirs = [rootProject.file('../tests/android/device')]
+}
+
+['Debug', 'Release'].each { variant ->
+    def rustBuild = tasks.register("rustBuild${variant}", Exec) {
+        workingDir rootProject.file('..')
+        commandLine './build.sh', 'android', 'native', variant.toLowerCase()
+        // Cargo handles incremental builds and source/dependency tracking.
+        doFirst {
+            if (variant == 'Release') {
+                if (!signingFile.isFile()) {
+                    throw new GradleException('Create the release key: ./build.sh android keygen')
+                }
+                if (playbackTests || System.getenv('CARLITOS_ANDROID_IMPORT_TESTS') == '1' ||
+                        System.getenv('CARLITOS_ANDROID_UI_TESTS') == '1') {
+                    throw new GradleException('Release builds must not include device test features')
+                }
+            }
+        }
+    }
+    tasks.configureEach {
+        if (name == "pre${variant}Build") dependsOn rustBuild
+    }
+}
+
+dependencies {
+    implementation "androidx.media3:media3-exoplayer:${versions.media3}"
+    implementation "androidx.media3:media3-session:${versions.media3}"
+}

@@ -1,0 +1,169 @@
+import { Palette } from "std-widgets.slint";
+import { State, BookItem, PartItem, ImportItem, SourceItem } from "state.slint";
+import { Theme } from "components/theme.slint";
+import { Action, Label, PageFrame } from "components/controls.slint";
+import { PlayerPanel, MobilePlayer } from "components/player.slint";
+import { AppDialog } from "components/dialog.slint";
+import { BookMenu } from "components/book-menu.slint";
+import { NoticeBanner } from "components/notice.slint";
+import { LibraryPage } from "pages/library.slint";
+import { BookPage } from "pages/book.slint";
+import { ImportPage } from "pages/import.slint";
+import { SettingsPage, SourcesPage, AboutPage } from "pages/settings.slint";
+export { State, Theme, Palette, BookItem, PartItem, ImportItem, SourceItem }
+export component AppWindow inherits Window {
+    title: "Carlitos";
+    icon: @image-url("../data/icons/io.github.mny315.Carlitos.svg");
+    preferred-width: 1000px; preferred-height: 700px;
+    min-width: State.android ? 0px : 360px; min-height: State.android ? 0px : 480px;
+    max-width: 16384px; max-height: 16384px;
+    background: Theme.background;
+    default-font-family: "sans-serif";
+    default-font-size: Theme.body;
+    forward-focus: shell;
+    // Stop observing the animation clock once the palette has settled.
+    Timer { interval: 50ms; running: Theme.transitioning; triggered => { Theme.finish-transition(); } }
+    Timer { interval: 40ms; running: State.books-moving; triggered => { State.finish-book-move(); } }
+    in property <int> current-overlay: State.overlay;
+    changed current-overlay => { if (self.current-overlay == 0) { shell.focus(); } }
+    in property <bool> book-menu-open: State.book-menu;
+    changed book-menu-open => { if (!self.book-menu-open && State.overlay == 0) { shell.focus(); } }
+    in-out property <bool> compact: State.android || self.width < 760px;
+    changed compact => { State.compact = self.compact; }
+    in property <bool> short-screen: shell.height < 540px;
+    in property <bool> keyboard-visible: State.android && root.virtual-keyboard-size.height > 0px;
+    changed keyboard-visible => {
+        State.keyboard-visible = self.keyboard-visible;
+        if (!self.keyboard-visible) { State.action("android-ime-hidden", ""); }
+    }
+    changed short-screen => { State.short-screen = self.short-screen; }
+    init => { State.compact = root.compact; State.short-screen = root.short-screen; }
+    public function mobile-back() -> bool { return State.mobile-back(); }
+    public function dismiss-keyboard() { if (State.overlay != 0) { app-dialog.focus-dialog(); } else { shell.focus(); } }
+    public function focus-search() { State.page = 0; library.focus-search(); }
+    public function library-touch(phase: int, finger: int, x: length, y: length) -> bool {
+        return library.touch(phase, finger, x, y);
+    }
+    in property <bool> search-open: State.search-open;
+    changed search-open => { if (State.android && !self.search-open && State.page == 0) { shell.focus(); } }
+    public function focus-shell() { shell.focus(); }
+    public function sync-theme() { Palette.color-scheme = Theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    if State.android: Rectangle {
+        x: 0px; y: 0px; width: root.width; height: root.safe-area-insets.top;
+        background: Theme.surface;
+    }
+    // Rounded display corners can extend beyond the system gesture inset.
+    if State.android: Rectangle {
+        y: shell.y + shell.height; width: root.width; height: root.height - self.y;
+        background: Theme.surface;
+    }
+    shell := FocusScope {
+        x: State.android ? root.safe-area-insets.left : 0px;
+        y: State.android ? root.safe-area-insets.top : 0px;
+        width: root.width - self.x - (State.android ? root.safe-area-insets.right : 0px);
+        height: max(0px, (root.keyboard-visible ? min(root.height, root.virtual-keyboard-position.y) : root.height) - self.y - (State.android && !root.keyboard-visible ? root.safe-area-insets.bottom + 16px : 0px));
+        enabled: State.overlay == 0;
+        key-released(e) => {
+            if (State.android && State.overlay == 0 && e.text == Key.Back) { State.action("android-back", ""); return accept; }
+            return reject;
+        }
+        key-pressed(e) => {
+            if (State.android && State.overlay == 0 && e.text == Key.Back) {
+                return accept;
+            }
+            if (State.book-menu) {
+                if (e.text == Key.Escape) { State.book-menu = false; }
+                return accept;
+            }
+            if (e.modifiers.control) {
+                if (e.text == "f" || e.text == "F") { State.page = 0; library.focus-search(); return accept; }
+                if (e.text == "o" || e.text == "O") { State.page = 2; State.choose-folder(); return accept; }
+                if (e.text == "l" || e.text == "L") { State.page = 0; return accept; }
+                if (e.text == "q" || e.text == "Q") { State.action("quit", ""); return accept; }
+                if (e.text == Key.LeftArrow) { State.action("previous", ""); return accept; }
+                if (e.text == Key.RightArrow) { State.action("next", ""); return accept; }
+            }
+            if (e.modifiers.alt && e.text == Key.LeftArrow) { State.action("back", ""); return accept; }
+            if (e.modifiers.alt && e.text == Key.RightArrow) { State.action("forward", ""); return accept; }
+            if (e.text == " ") { State.action("toggle", ""); return accept; }
+            return reject;
+        }
+        VerticalLayout {
+            spacing: 0px;
+            if State.android && !State.keyboard-visible && !(State.page == 0 && State.search-open): Rectangle {
+                height: Theme.action-height + 17px;
+                background: Theme.surface;
+                Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.line; }
+                HorizontalLayout {
+                    padding-left: 16px; padding-right: 8px; padding-top: 8px; padding-bottom: 9px; spacing: 4px;
+                    Label { text: "Carlitos"; font-size: 20px * Theme.font-scale; font-weight: 650; }
+                    if State.page != 0: Action { icon: @image-url("icons/book.svg"); accessible-label: Theme.t("Библиотека", "Library"); quiet: true; clicked => { State.navigate(0); } }
+                    if State.page == 0: Action { icon: @image-url("icons/search.svg"); accessible-label: Theme.t("Поиск книг", "Search books"); quiet: true; clicked => { library.focus-search(); } }
+                    if State.page == 0: Action { icon: @image-url("icons/plus.svg"); accessible-label: Theme.t("Добавить книги", "Add books"); quiet: true; clicked => { State.navigate(2); } }
+                    Action {
+                        icon: @image-url("icons/more.svg"); accessible-label: Theme.t("Меню", "Navigation menu");
+                        quiet: true; selected: State.overlay == 12;
+                        clicked => { State.navigation-menu-x = self.absolute-position.x + self.width; State.navigation-menu-y = self.absolute-position.y + self.height; State.overlay = 12; }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 0px;
+                if !State.compact: Rectangle {
+                    width: 190px; background: Theme.surface;
+                    VerticalLayout { padding: 18px; spacing: 8px;
+                        HorizontalLayout { height: 64px; spacing: 10px;
+                            Rectangle { width: 26px; Image { source: @image-url("icons/book.svg"); colorize: Theme.accent; width: 26px; height: 26px; y: (parent.height - self.height) / 2; } }
+                            Label { text: "Carlitos"; font-size: (23px) * Theme.font-scale; font-weight: 650; }
+                        }
+                        Label { text: Theme.t("ВАШЕ ПРОСТРАНСТВО", "YOUR SPACE"); color: Theme.muted; font-size: (10px) * Theme.font-scale; height: 32px; }
+                        Action { text: Theme.t("Библиотека", "Library"); icon: @image-url("icons/book.svg"); fill: true; font-weight: 400; selected: State.page == 0 || State.page == 1; quiet: true; clicked => { State.navigate(0); } }
+                        Action { text: Theme.t("Источники", "Sources"); icon: @image-url("icons/folder.svg"); fill: true; font-weight: 400; selected: State.page == 4; quiet: true; clicked => { State.navigate(4); } }
+                        Rectangle { vertical-stretch: 1; }
+                        if State.demo: Label { text: Theme.t("Демонстрация", "Demo library"); color: Theme.accent; font-size: (12px) * Theme.font-scale; }
+                        Label { text: Theme.t("В своём ритме.", "At your own pace."); color: Theme.muted; font-size: (12px) * Theme.font-scale; height: 30px; }
+                        Action { text: Theme.t("Настройки", "Settings"); icon: @image-url("icons/settings.svg"); fill: true; font-weight: 400; quiet: true; selected: State.page == 3; clicked => { State.navigate(3); } }
+                        Action { text: Theme.t("О программе", "About"); icon: @image-url("icons/info.svg"); fill: true; font-weight: 400; quiet: true; selected: State.page == 5; clicked => { State.navigate(5); } }
+                    }
+                }
+                VerticalLayout { padding: State.compact ? 12px : 28px; spacing: State.compact ? 12px : 16px;
+                    if State.compact && !State.android: HorizontalLayout { height: Theme.action-height; spacing: 4px;
+                        Label { text: "Carlitos"; font-size: (20px) * Theme.font-scale; font-weight: 650; horizontal-stretch: 1; }
+                        Action { icon: @image-url("icons/book.svg"); accessible-label: Theme.t("Библиотека", "Library"); quiet: true; selected: State.page == 0 || State.page == 1; clicked => { State.navigate(0); } }
+                        Action { icon: @image-url("icons/folder.svg"); accessible-label: Theme.t("Источники", "Sources"); quiet: true; selected: State.page == 4; clicked => { State.navigate(4); } }
+                        Action { icon: @image-url("icons/settings.svg"); accessible-label: Theme.t("Настройки", "Settings"); quiet: true; selected: State.page == 3; clicked => { State.navigate(3); } }
+                        Action { icon: @image-url("icons/info.svg"); accessible-label: Theme.t("О программе", "About"); quiet: true; selected: State.page == 5; clicked => { State.navigate(5); } }
+                    }
+                    Rectangle {
+                        clip: true;
+                        notice := NoticeBanner {
+                            x: 0px; y: 0px;
+                            width: parent.width;
+                            text: State.notice;
+                            bottom-gap: State.compact ? 12px : 16px;
+                            dismissed => { State.notice = ""; }
+                        }
+                        Rectangle {
+                            y: notice.height; width: parent.width; height: max(0px, parent.height - self.y);
+                            PageFrame { active: State.page == 0; library := LibraryPage { } }
+                            book-frame := PageFrame { active: State.page == 1; if book-frame.visible: BookPage { } }
+                            import-frame := PageFrame { active: State.page == 2; if import-frame.visible: ImportPage { } }
+                            settings-frame := PageFrame { active: State.page == 3; if settings-frame.visible: SettingsPage { } }
+                            sources-frame := PageFrame { active: State.page == 4; if sources-frame.visible: SourcesPage { } }
+                            about-frame := PageFrame { active: State.page == 5; if about-frame.visible: AboutPage { } }
+                        }
+                    }
+                }
+            }
+            if !State.android: PlayerPanel { }
+            if State.android && !State.keyboard-visible: MobilePlayer { }
+        }
+        BookMenu { }
+    }
+    app-dialog := AppDialog {
+        x: 0px; y: 0px; width: root.width; height: root.height;
+        top-inset: shell.y; left-inset: shell.x;
+        right-inset: root.width - shell.x - shell.width;
+        bottom-inset: root.height - shell.y - shell.height;
+    }
+}

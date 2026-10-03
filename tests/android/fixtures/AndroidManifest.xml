@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="io.github.mny315.carlitos" />
+        <package android:name="io.github.mny315.carlitos.playbacktest" />
+    </queries>
+    <application android:label="Carlitos Fixtures">
+        <provider android:name="io.github.mny315.carlitos.PlaybackFixtureProvider"
+            android:authorities="io.github.mny315.carlitos.test.playback" android:exported="true" />
+        <provider android:name="io.github.mny315.carlitos.SliceFixtureProvider"
+            android:authorities="io.github.mny315.carlitos.test.slices"
+            android:exported="false" android:grantUriPermissions="true" />
+        <activity android:name="io.github.mny315.carlitos.FixtureGrantActivity" android:exported="true" />
+        <provider android:name="io.github.mny315.carlitos.SourceFixtureProvider"
+            android:authorities="io.github.mny315.carlitos.test.sources"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:exported="true" android:grantUriPermissions="true">
+            <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+        </provider>
+    </application>
+</manifest>

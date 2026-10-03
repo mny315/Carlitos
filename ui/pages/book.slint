@@ -1,0 +1,101 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "../components/theme.slint";
+import { Action, Label, Meter, Cover, PlaybackIndicator } from "../components/controls.slint";
+
+component BookSummary inherits HorizontalLayout {
+    vertical-stretch: 0;
+    spacing: State.compact ? 16px : 24px;
+    VerticalLayout {
+        width: max(State.compact ? 108px : 136px, play.preferred-width);
+        spacing: 12px; alignment: start;
+        HorizontalLayout { alignment: center;
+            Cover { source: State.selected.cover; initials: State.selected.initials; variant: State.selected.variant; width: State.compact ? 80px : 136px; height: State.compact ? 108px : 184px; }
+        }
+        HorizontalLayout { alignment: center;
+            play := Action {
+                private property <bool> playing: State.playing && State.selected.key == State.current.key;
+                text: playing ? Theme.t("Пауза", "Pause") : State.selected.completed ? Theme.t("Слушать снова", "Play again") : State.selected.started ? Theme.t("Продолжить", "Continue") : Theme.t("Слушать", "Play");
+                primary: true;
+                icon: playing ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg");
+                clicked => { State.action("resume", State.selected.key); }
+            }
+        }
+    }
+    VerticalLayout { spacing: 10px; alignment: start;
+        Label { text: State.selected.title; font-size: (State.compact ? 22px : 28px) * Theme.font-scale; font-weight: 650; wrap: word-wrap; }
+        Label { text: State.selected.author; color: Theme.muted; wrap: word-wrap; }
+        if State.selected.tags != "": Label { text: State.selected.tags; color: Theme.muted; font-size: (12px) * Theme.font-scale; wrap: word-wrap; }
+        Label { text: State.selected.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; wrap: word-wrap; }
+        Meter { value: State.selected.progress; }
+    }
+}
+
+export component BookPage inherits Rectangle {
+    VerticalLayout {
+        spacing: 16px;
+        HorizontalLayout {
+            Action { icon: @image-url("../icons/back.svg"); text: !State.android && State.compact && State.contents ? Theme.t("К книге", "Book") : Theme.t("Библиотека", "Library"); quiet: true; clicked => { if (!State.android && State.compact && State.contents) { State.contents = false; } else { State.navigate(0); } } }
+            Rectangle { horizontal-stretch: 1; }
+            Action { icon: @image-url("../icons/more.svg"); accessible-label: Theme.t("Редактировать книгу", "Edit book"); quiet: true; clicked => { State.action("begin-edit", State.selected.key); } }
+        }
+        if !State.compact: BookSummary { }
+        if State.android && !State.short-screen: HorizontalLayout {
+            spacing: 12px;
+            Cover { source: State.selected.cover; initials: State.selected.initials; variant: State.selected.variant; width: 54px; height: 72px; }
+            VerticalLayout { spacing: 4px; alignment: center;
+                Label { text: State.selected.title; font-weight: 650; wrap: word-wrap; max-height: Theme.body * 3; }
+                Label { text: State.selected.author; color: Theme.muted; }
+                Label { text: State.selected.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+            }
+            Action {
+                icon: State.playing && State.selected.key == State.current.key ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg");
+                accessible-label: Theme.t("Слушать / пауза", "Play / pause"); primary: true;
+                clicked => { State.action("resume", State.selected.key); }
+            }
+        }
+        if State.compact && !State.android && !State.contents: ScrollView {
+            VerticalLayout { spacing: 16px; padding-right: 6px; alignment: start;
+                BookSummary { }
+                HorizontalLayout { alignment: start;
+                    Action { text: Theme.t("Оглавление", "Contents"); icon: @image-url("../icons/book.svg"); clicked => { State.contents = true; } }
+                }
+            }
+        }
+        if State.android || !State.compact || State.contents: VerticalLayout {
+            spacing: 8px;
+            Label { text: Theme.t("ОГЛАВЛЕНИЕ", "CONTENTS"); color: Theme.muted; font-size: (11px) * Theme.font-scale; height: 22px; }
+            ListView {
+                vertical-scrollbar-policy: State.android ? ScrollBarPolicy.always-off : ScrollBarPolicy.as-needed;
+                for part in State.parts: Rectangle {
+                    height: max(State.android ? 64px : 54px, Theme.body * 2 + 16px); border-radius: 8px; background: part.active ? Theme.tint : transparent;
+                    animate background { duration: Theme.control-motion; }
+                    HorizontalLayout { padding: 8px; spacing: 10px;
+                        Rectangle {
+                            width: 28px;
+                            if part.active: PlaybackIndicator {
+                                y: (parent.height - self.height) / 2;
+                                playing: State.playing;
+                                animation-enabled: State.page == 1;
+                            }
+                            if !part.active: Label { text: part.number; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+                        }
+                        VerticalLayout { spacing: 3px;
+                            Label { text: part.title; color: part.active ? Theme.accent : Theme.text; font-size: part.chapter ? 13px * Theme.font-scale : Theme.body; font-weight: part.active ? 600 : 400; }
+                            Label { text: part.detail; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
+                        }
+                        if State.reorder && !part.chapter: Action { icon: @image-url("../icons/up.svg"); quiet: true; accessible-label: Theme.t("Выше", "Move up"); clicked => { State.action("part-up", part.key); } }
+                        if State.reorder && !part.chapter: Action { icon: @image-url("../icons/down.svg"); quiet: true; accessible-label: Theme.t("Ниже", "Move down"); clicked => { State.action("part-down", part.key); } }
+                        if !State.reorder: Action {
+                            icon: part.active && State.playing ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg");
+                            quiet: true; selected: part.active;
+                            accessible-label: (part.active ? State.playing ? Theme.t("Пауза: ", "Pause: ") : Theme.t("Продолжить: ", "Continue: ") : Theme.t("Слушать: ", "Play: ")) + part.title;
+                            clicked => { State.action(part.active ? "toggle" : "part", part.key); }
+                        }
+                    }
+                }
+            }
+            if State.reorder: HorizontalLayout { alignment: start; Action { text: Theme.t("Готово", "Done"); primary: true; clicked => { State.reorder = false; } } }
+        }
+    }
+}

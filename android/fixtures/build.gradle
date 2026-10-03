@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def versions = new groovy.json.JsonSlurper().parse(rootProject.file('../nix/android-versions.json'))
+// Providers run under their own UID. A standalone APK includes Kotlin's runtime;
+// androidTest excludes dependencies already present in the application under test.
+android {
+    namespace 'io.github.mny315.carlitos.fixtures'
+    compileSdk versions.compileSdk
+    buildToolsVersion versions.buildTools
+    defaultConfig {
+        applicationId 'io.github.mny315.carlitos.fixtures'
+        minSdk versions.minSdk
+        targetSdk versions.targetSdk
+        versionCode 1
+        versionName '1'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    sourceSets.main {
+        java.srcDirs = [rootProject.file('../tests/android/fixtures')]
+        manifest.srcFile rootProject.file('../tests/android/fixtures/AndroidManifest.xml')
+        assets.srcDirs = [rootProject.file('../target/tests/android/import/fixtures'),
+                          rootProject.file('../target/tests/android/playback/fixtures')]
+    }
+}

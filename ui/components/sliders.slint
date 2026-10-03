@@ -1,0 +1,198 @@
+import { Theme } from "theme.slint";
+
+export component Meter inherits Rectangle {
+    in property <float> value;
+    height: 4px; border-radius: 2px; background: Theme.line;
+    Rectangle { x: 0px; y: 0px; width: parent.width * clamp(root.value, 0, 1); height: parent.height; border-radius: 2px; background: Theme.accent; }
+}
+
+export component PercentSlider inherits Rectangle {
+    in-out property <int> value: 100;
+    in property <int> minimum: 70;
+    in property <int> maximum: 205;
+    in property <int> step: 15;
+    in property <string> label;
+    in property <float> input-scale: 1;
+    out property <bool> dragging: false;
+    private property <length> drag-origin;
+    private property <length> drag-width;
+    private property <float> fraction: (value - minimum) / (maximum - minimum);
+    private property <int> first-tick: ceil((minimum - 100) / step);
+    private property <int> last-tick: floor((maximum - 100) / step);
+    callback changed;
+    callback released;
+    callback dragging-changed(bool);
+    height: Theme.touch ? 48px : 28px;
+    accessible-role: slider;
+    accessible-label: label;
+    accessible-value: value;
+    accessible-value-minimum: minimum;
+    accessible-value-maximum: maximum;
+    accessible-value-step: step;
+    accessible-action-increment => { root.advance(1); }
+    accessible-action-decrement => { root.advance(-1); }
+    accessible-action-set-value(value) => {
+        if (value.is-float()) { root.set-value(value.to-float()); root.released(); }
+    }
+    function set-value(next: float) {
+        let stepped = clamp(100 + round((next - 100) / root.step) * root.step, root.minimum, root.maximum);
+        if (stepped != root.value) {
+            root.value = stepped;
+            Theme.haptic("scale-tick");
+            root.changed();
+        }
+    }
+    function advance(direction: int) {
+        root.set-value(direction > 0 ? 100 + (floor((root.value - 100) / root.step) + 1) * root.step : 100 + (ceil((root.value - 100) / root.step) - 1) * root.step);
+        root.released();
+    }
+    function move-pointer(x: length) {
+        root.set-value(root.minimum + (x - root.drag-origin) / max(1px, root.drag-width) * (root.maximum - root.minimum));
+    }
+    Meter { x: knob.width / 2; y: (parent.height - self.height) / 2; width: parent.width - knob.width; value: root.fraction; }
+    for tick in root.last-tick - root.first-tick + 1: Rectangle {
+        private property <int> percent: 100 + (root.first-tick + tick) * root.step;
+        x: knob.width / 2 + (parent.width - knob.width) * (percent - root.minimum) / (root.maximum - root.minimum) - self.width / 2;
+        y: (parent.height - self.height) / 2;
+        width: 2px; height: percent == 100 ? 14px : 10px;
+        border-radius: 1px; background: Theme.muted;
+    }
+    knob := Rectangle {
+        x: root.fraction * (parent.width - self.width); y: (parent.height - self.height) / 2;
+        width: Theme.touch ? 20px : 16px; height: self.width;
+        border-radius: self.width / 2; background: Theme.accent;
+        border-width: focus.has-focus ? 2px : 0px; border-color: Theme.text;
+    }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.RightArrow || e.text == Key.UpArrow) { root.advance(1); return accept; }
+            if (e.text == Key.LeftArrow || e.text == Key.DownArrow) { root.advance(-1); return accept; }
+            if (e.text == Key.Home) { root.set-value(root.minimum); root.released(); return accept; }
+            if (e.text == Key.End) { root.set-value(root.maximum); root.released(); return accept; }
+            return reject;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.cancel) {
+                if (root.dragging) { root.dragging = false; root.dragging-changed(false); root.released(); }
+                return;
+            }
+            if (e.button != PointerEventButton.left) { return; }
+            if (e.kind == PointerEventKind.down) {
+                focus.focus();
+                // Keep the gesture in physical coordinates while its own scale
+                // changes. Reflow must not change the percentage under a finger.
+                root.drag-origin = (root.absolute-position.x + knob.width / 2) * root.input-scale;
+                root.drag-width = (root.width - knob.width) * root.input-scale;
+                root.dragging = true;
+                root.dragging-changed(true);
+                root.move-pointer((root.absolute-position.x + self.mouse-x) * root.input-scale);
+            }
+            if (e.kind == PointerEventKind.up && root.dragging) {
+                root.dragging = false;
+                root.dragging-changed(false);
+                root.released();
+            }
+        }
+        moved => { if (root.dragging) { root.move-pointer((root.absolute-position.x + self.mouse-x) * root.input-scale); } }
+        scroll-event(e) => {
+            let delta = e.delta-y != 0px ? e.delta-y : e.delta-x;
+            if (delta == 0px) { return reject; }
+            root.advance(delta > 0px ? 1 : -1);
+            return accept;
+        }
+    }
+}
+
+export component SeekBar inherits Rectangle {
+    in-out property <float> value;
+    // Presentation may briefly retain the previous book during a crossfade;
+    // input and accessibility always use the current playback value.
+    in property <float> display-value: value;
+    in property <bool> enabled: true;
+    in property <bool> visual-enabled: enabled;
+    in property <string> label;
+    in property <float> step: 0.02;
+    out property <bool> dragging: false;
+    private property <float> drag-value;
+    private property <bool> pending: false;
+    changed enabled => {
+        if (!root.enabled) {
+            root.dragging = false;
+            root.pending = false;
+        }
+    }
+    callback changed(float);
+    height: Theme.touch ? 48px : 24px;
+    accessible-role: slider;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-value: round(value * 100);
+    accessible-value-minimum: 0;
+    accessible-value-maximum: 100;
+    accessible-action-increment => { root.set-value(root.value + root.step, true); }
+    accessible-action-decrement => { root.set-value(root.value - root.step, true); }
+    opacity: visual-enabled ? 1 : 0.4;
+    function flush() {
+        if (root.pending && root.enabled) {
+            root.pending = false;
+            root.changed(root.drag-value);
+        }
+    }
+    function set-value(next: float, commit: bool) {
+        if (!root.enabled) { return; }
+        let clamped = clamp(next, 0, 1);
+        if (clamped != root.value) {
+            if (round(clamped * 20) != round(root.value * 20)) { Theme.haptic("tick"); }
+            root.value = clamped;
+            root.drag-value = clamped;
+            root.pending = true;
+        }
+        if (commit) { root.flush(); }
+    }
+    // Give immediate visual feedback, while keeping seeks and volume writes
+    // bounded during a drag. Releasing always flushes the final position.
+    Timer { interval: 40ms; running: root.dragging;
+        triggered => { root.flush(); }
+    }
+    Meter { y: (parent.height - self.height) / 2; width: parent.width; value: root.dragging ? root.drag-value : root.display-value; }
+    Rectangle { x: clamp(root.dragging ? root.drag-value : root.display-value, 0, 1) * (parent.width - self.width); y: (parent.height - self.height) / 2; width: Theme.touch ? 18px : 12px; height: self.width; border-radius: self.width / 2; background: Theme.accent; visible: Theme.touch || drag.has-hover || focus.has-focus || root.dragging; }
+    focus := FocusScope { enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == Key.RightArrow || e.text == Key.UpArrow) { root.set-value(root.value + root.step, true); return accept; }
+            if (e.text == Key.LeftArrow || e.text == Key.DownArrow) { root.set-value(root.value - root.step, true); return accept; }
+            if (e.text == Key.Home) { root.set-value(0, true); return accept; }
+            if (e.text == Key.End) { root.set-value(1, true); return accept; }
+            return reject;
+        }
+    }
+    drag := TouchArea { enabled: root.enabled; mouse-cursor: pointer;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.cancel) { root.dragging = false; root.pending = false; return; }
+            if (event.button != PointerEventButton.left) { return; }
+            if (event.kind == PointerEventKind.down) {
+                Theme.haptic("button");
+                focus.focus();
+                root.drag-value = root.value;
+                root.dragging = true;
+                root.set-value(self.mouse-x / max(1px, root.width), true);
+            }
+            if (event.kind == PointerEventKind.up && root.dragging) {
+                root.set-value(self.mouse-x / max(1px, root.width), true);
+                root.dragging = false;
+            }
+        }
+        moved => {
+            if (root.dragging) { root.set-value(self.mouse-x / max(1px, root.width), false); }
+        }
+        scroll-event(event) => {
+            if (root.dragging) { return accept; }
+            let delta = event.delta-y != 0px ? event.delta-y : event.delta-x;
+            if (delta == 0px) { return reject; }
+            root.set-value(root.value + delta / 60px * root.step, true);
+            return accept;
+        }
+    }
+}

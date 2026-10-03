@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="io.github.mny315.carlitos.fixtures" />
+    </queries>
+    <application>
+        <receiver android:name=".TestProcessReceiver" android:exported="true" />
+    </application>
+</manifest>

@@ -1,0 +1,181 @@
+import { ScrollView, ListView, ComboBox, SpinBox } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "../components/theme.slint";
+import { Action, Label, Toggle, BusyStatus, PercentSlider } from "../components/controls.slint";
+
+component ScaleSetting inherits VerticalLayout {
+    in property <string> title;
+    in property <string> description;
+    in property <int> minimum: 70;
+    in property <int> maximum;
+    in-out property <int> percent: 100;
+    callback committed;
+    callback previewed;
+    spacing: 8px;
+    Label { text: root.title; wrap: word-wrap; }
+    HorizontalLayout {
+        spacing: 8px;
+        SpinBox {
+            minimum: root.minimum; maximum: root.maximum; step-size: 15;
+            value <=> root.percent;
+            min-height: Theme.action-height;
+            accessible-label: root.title + " (%)";
+            edited(_) => { root.committed(); }
+        }
+        Label { text: "%"; horizontal-stretch: 0; }
+        Action {
+            text: "100%";
+            accessible-label: Theme.t("Сбросить: ", "Reset: ") + root.title;
+            enabled: root.percent != 100;
+            clicked => { root.percent = 100; root.committed(); }
+        }
+    }
+    PercentSlider {
+        minimum: root.minimum; maximum: root.maximum;
+        value <=> root.percent;
+        input-scale: State.android ? State.ui-scale-percent / 100 : 1;
+        label: root.title;
+        changed => { root.previewed(); }
+        released => { root.committed(); }
+        dragging-changed(dragging) => { State.display-settings-dragging = dragging; }
+    }
+    Label { text: root.description; color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
+}
+
+component SettingsContent inherits VerticalLayout {
+        spacing: 18px; padding-right: 12px;
+        Label { text: Theme.t("Настройки", "Settings"); font-size: (28px) * Theme.font-scale; font-weight: 650; }
+        Label { text: Theme.t("ОФОРМЛЕНИЕ", "APPEARANCE"); color: Theme.muted; font-size: (11px) * Theme.font-scale; }
+        if State.android: Action { fill: true; text: State.theme-labels[State.theme-index]; icon: @image-url("../icons/down.svg"); clicked => { State.overlay = 10; } }
+        if State.android: Action { fill: true; text: State.language-labels[State.language-index]; icon: @image-url("../icons/down.svg"); clicked => { State.overlay = 11; } }
+        if !State.android: ComboBox { model: State.theme-labels; current-index <=> State.theme-index; selected(_) => { State.settings-changed(); } }
+        if !State.android: ComboBox { model: State.language-labels; current-index <=> State.language-index; selected(_) => { State.settings-changed(); } }
+        ScaleSetting {
+            title: Theme.t("Размер текста", "Text size");
+            description: "70–205%";
+            maximum: 205; percent <=> State.text-size-percent;
+            previewed => { State.display-settings-preview(); }
+            committed => { State.settings-changed(); }
+        }
+        if State.android: ScaleSetting {
+            title: Theme.t("Масштаб интерфейса", "Interface scale");
+            description: "70–160%";
+            maximum: 160; percent <=> State.ui-scale-percent;
+            previewed => { State.display-settings-preview(); }
+            committed => { State.settings-changed(); }
+        }
+        Label { text: Theme.t("ПОВЕДЕНИЕ", "BEHAVIOR"); color: Theme.muted; font-size: (11px) * Theme.font-scale; }
+        if !State.android: Toggle { text: Theme.t("Закрывать в трей", "Close to tray"); description: Theme.t("При наличии трея окно скрывается в него.", "Hides the window in the system tray when available."); checked <=> State.close-to-tray; toggled => { State.settings-changed(); } }
+        Toggle { text: Theme.t("Отключить анимации", "Disable animations"); description: Theme.t("Убирает плавные переходы страниц, меню, цветов и плеера.", "Turns off smooth page, menu, color and player transitions."); checked <=> Theme.reduced-motion; toggled => { State.settings-changed(); } }
+        Toggle { text: Theme.t("Пропускать тишину", "Skip silence"); description: Theme.t("Сокращает длинные тихие паузы, сохраняя короткие паузы между фразами.", "Shortens long quiet pauses while keeping brief pauses between phrases."); checked <=> State.skip-silence; toggled => { State.action("skip-silence", ""); } }
+        Rectangle { min-height: 16px; vertical-stretch: 1; }
+}
+
+export component SettingsPage inherits Rectangle {
+    if !State.android: ScrollView { SettingsContent { } }
+    if State.android: Rectangle {
+        scroll := Flickable {
+            width: parent.width; height: parent.height;
+            // Scaling changes the logical pointer coordinates. Once a slider
+            // owns the gesture, those changes must not start a vertical scroll.
+            interactive: !State.display-settings-dragging;
+            content-width: self.width;
+            content-height: content.preferred-height;
+            content := SettingsContent { width: parent.width; }
+        }
+        Rectangle {
+            x: parent.width - 2px; width: 2px;
+            height: min(parent.height, max(24px, parent.height * parent.height / max(1px, scroll.content-height)));
+            y: clamp(-scroll.content-y / max(1px, scroll.content-height - scroll.height), 0, 1) * (parent.height - self.height);
+            visible: scroll.content-height > scroll.height;
+            border-radius: 1px; background: Theme.line;
+        }
+    }
+}
+export component SourcesPage inherits VerticalLayout {
+    spacing: 16px;
+    Label { text: Theme.t("Источники", "Sources"); font-size: (28px) * Theme.font-scale; font-weight: 650; }
+    if !State.compact: Label { text: Theme.t("Список аудиокниг", "Audiobook list"); color: Theme.muted; wrap: word-wrap; }
+    ListView { for source in State.sources: VerticalLayout {
+        padding-top: State.compact ? 4px : 12px; padding-bottom: State.compact ? 8px : 18px; spacing: 8px;
+        Label { text: source.path; font-size: (13px) * Theme.font-scale; wrap: word-wrap; }
+        Label { text: source.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+        HorizontalLayout { spacing: 6px; alignment: start;
+            Action { text: Theme.t("Обновить…", "Update…"); icon: @image-url("../icons/refresh.svg"); enabled: !State.source-busy; clicked => { State.action("begin-source-edit", source.key); } }
+            Action { icon: @image-url("../icons/trash.svg"); destructive: true; enabled: !State.source-busy; accessible-label: Theme.t("Удалить источник", "Remove source"); clicked => { State.remove-key = source.key; State.remove-kind = "source"; State.overlay = 1; } }
+        }
+    } }
+    if State.source-busy: BusyStatus { text: Theme.t("Обновляем источник…", "Updating source…"); }
+    HorizontalLayout { alignment: start; Action { text: Theme.t("Добавить папку", "Add a folder"); icon: @image-url("../icons/plus.svg"); primary: true; clicked => { State.page = 2; } } }
+}
+component ShortcutRow inherits HorizontalLayout {
+    in property <string> keys;
+    in property <string> description;
+    spacing: 14px;
+    height: max(38px, caption.preferred-height + 12px);
+    Rectangle {
+        width: State.compact ? 112px : 136px;
+        VerticalLayout { alignment: center;
+            Rectangle {
+                height: 30px; border-radius: 6px;
+                background: Theme.raised; border-width: 1px; border-color: Theme.line;
+                Label { text: root.keys; font-family: "monospace"; font-size: (12px) * Theme.font-scale; horizontal-alignment: center; vertical-alignment: center; }
+            }
+        }
+    }
+    caption := Label { text: root.description; font-size: (13px) * Theme.font-scale; wrap: word-wrap; vertical-alignment: center; }
+}
+
+export component AboutPage inherits ScrollView {
+    VerticalLayout {
+        spacing: 20px; padding: State.compact ? 4px : 20px; alignment: start;
+        HorizontalLayout { alignment: start; Action { text: Theme.t("Назад", "Back"); icon: @image-url("../icons/back.svg"); quiet: true; clicked => { State.navigate(3); } } }
+        HorizontalLayout { alignment: center; spacing: 18px;
+            Image { source: @image-url("../../data/icons/io.github.mny315.Carlitos.svg"); width: 80px; height: 80px; }
+            VerticalLayout { alignment: center; spacing: 6px;
+                Label { text: "Carlitos"; font-size: (32px) * Theme.font-scale; font-weight: 650; }
+                Label { text: Theme.t("Версия 1.0.1", "Version 1.0.1"); color: Theme.muted; }
+            }
+        }
+        Label { text: Theme.t("Ваши книги. Ваш ритм.", "Your books. Your pace."); font-size: (21px) * Theme.font-scale; font-weight: 600; horizontal-alignment: center; wrap: word-wrap; }
+        Label { text: Theme.t("Локальный плеер аудиокниг для Linux, Windows и Android.", "A local audiobook player for Linux, Windows and Android."); color: Theme.muted; font-size: (15px) * Theme.font-scale; wrap: word-wrap; horizontal-alignment: center; }
+        Label { text: Theme.t("Автор — mny315", "Created by mny315"); font-weight: 600; horizontal-alignment: center; }
+        Label { text: State.android ? "MIT · Rust · Slint" : State.windows ? "MIT · Rust · Windows Media Foundation · Sonic" : "MIT · Rust · GStreamer"; color: Theme.muted; font-size: (13px) * Theme.font-scale; horizontal-alignment: center; }
+        HorizontalLayout { alignment: center;
+            Label {
+                text: Theme.t("Интерфейс — Slint 1.18.1 · slint.dev", "Interface — Slint 1.18.1 · slint.dev");
+                color: slint-link.has-hover || slint-focus.has-focus ? Theme.accent : Theme.muted;
+                font-size: (13px) * Theme.font-scale; horizontal-stretch: 0; horizontal-alignment: center; wrap: word-wrap;
+                accessible-role: button;
+                accessible-label: Theme.t("Открыть сайт Slint", "Open the Slint website");
+                accessible-action-default => { Platform.open-url("https://slint.dev"); }
+                slint-focus := FocusScope {
+                    key-pressed(e) => {
+                        if (e.text == " " || e.text == Key.Return) { Platform.open-url("https://slint.dev"); return accept; }
+                        return reject;
+                    }
+                }
+                slint-link := TouchArea { mouse-cursor: pointer; clicked => { slint-focus.focus(); Platform.open-url("https://slint.dev"); } }
+            }
+        }
+        if !State.android: HorizontalLayout { alignment: center;
+            Rectangle {
+                max-width: 560px; horizontal-stretch: 1;
+                height: shortcuts.preferred-height;
+                background: Theme.surface; border-radius: 12px; border-width: 1px; border-color: Theme.line;
+                shortcuts := VerticalLayout {
+                    padding: State.compact ? 12px : 16px; spacing: 6px;
+                    Label { text: Theme.t("Управление", "Keyboard shortcuts"); font-size: (18px) * Theme.font-scale; font-weight: 600; }
+                    Rectangle { height: 6px; }
+                    ShortcutRow { keys: Theme.t("Пробел", "Space"); description: Theme.t("Воспроизведение / пауза", "Play / pause"); }
+                    ShortcutRow { keys: "Alt + ← / →"; description: Theme.t("Назад / вперёд на 10 с", "Back / forward 10 seconds"); }
+                    ShortcutRow { keys: "Ctrl + ← / →"; description: Theme.t("Предыдущая / следующая часть", "Previous / next part"); }
+                    ShortcutRow { keys: "Ctrl + F"; description: Theme.t("Поиск в библиотеке", "Search library"); }
+                    ShortcutRow { keys: "Ctrl + O"; description: Theme.t("Добавить книги", "Add books"); }
+                    ShortcutRow { keys: "Ctrl + L"; description: Theme.t("Открыть библиотеку", "Open library"); }
+                    ShortcutRow { keys: "Ctrl + Q"; description: Theme.t("Сохранить и выйти", "Save and quit"); }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,49 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Action, Label } from "controls.slint";
+
+export component NoticeBanner inherits Rectangle {
+    in property <string> text;
+    in property <length> bottom-gap: 12px;
+    private property <string> shown-text;
+    private property <float> reveal: text != "" ? 1 : 0;
+    animate reveal { duration: Theme.reduced-motion ? 0ms : 220ms; easing: ease-in-out; }
+    changed text => { if (self.text != "") { self.shown-text = self.text; } }
+    callback dismissed;
+    // Measure the text, not the ScrollView's preferred size. A short notice
+    // takes one compact row; longer messages remain readable by scrolling.
+    private property <length> card-height: max(Theme.touch ? 48px : 36px, min(72px * Theme.font-scale, message.preferred-height) + 12px);
+    height: reveal * (card-height + bottom-gap);
+    opacity: reveal;
+    visible: reveal > 0;
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: Theme.t("Уведомление", "Notification");
+    Rectangle {
+        x: 0px; y: 0px;
+        width: root.width; height: root.card-height;
+        background: Theme.tint; border-radius: 8px;
+    }
+    ScrollView {
+        x: 12px; y: 6px;
+        width: root.width - 12px - dismiss.width;
+        height: root.card-height - 12px;
+        content-width: self.width;
+        message := Label {
+            text: root.shown-text;
+            wrap: word-wrap;
+            color: Theme.accent;
+            font-size: 13px * Theme.font-scale;
+        }
+    }
+    dismiss := Action {
+        x: root.width - self.width; y: (root.card-height - self.height) / 2;
+        width: Theme.touch ? 48px : 40px;
+        height: Theme.touch ? 48px : 32px;
+        icon: @image-url("../icons/close.svg");
+        accessible-label: Theme.t("Закрыть сообщение", "Dismiss message");
+        quiet: true;
+        enabled: root.text != "";
+        clicked => { root.dismissed(); }
+    }
+}

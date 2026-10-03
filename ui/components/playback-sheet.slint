@@ -1,0 +1,89 @@
+import { ScrollView } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action, Label, SeekBar } from "controls.slint";
+
+export component PlaybackSheet inherits Rectangle {
+    in property <bool> speed;
+    private property <float> setting-value: speed ? (State.rate - 0.5) / 2.5 : State.volume;
+    // SeekBar writes its local value while dragging. Resync after presets,
+    // +/- actions, or switching between volume and speed in this same panel.
+    changed setting-value => { slider.value = root.setting-value; }
+    callback done;
+    preferred-height: content.preferred-height;
+    background: Theme.surface;
+    border-radius: 24px;
+    border-width: 1px;
+    border-color: Theme.line;
+    // Consume taps on the panel's padding as well as its controls.
+    TouchArea { }
+    content := VerticalLayout {
+        padding: 20px; spacing: 20px;
+        HorizontalLayout { spacing: 12px;
+            Rectangle {
+                width: 40px; height: 40px; border-radius: 12px; background: Theme.tint;
+                Image {
+                    x: 9px; y: 9px; width: 22px; height: 22px;
+                    source: root.speed ? @image-url("../icons/play.svg") : State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg");
+                    colorize: Theme.accent;
+                }
+            }
+            Label {
+                text: root.speed ? Theme.t("Скорость воспроизведения", "Playback speed") : Theme.t("Громкость", "Volume");
+                font-size: 20px * Theme.font-scale; font-weight: 600; wrap: word-wrap;
+            }
+        }
+        ScrollView {
+            preferred-height: controls.preferred-height;
+            min-height: 0px;
+            content-width: self.width;
+            controls := VerticalLayout { spacing: 16px;
+                HorizontalLayout { spacing: 12px;
+                    Action {
+                        text: "−"; min-width: 52px;
+                        accessible-label: root.speed ? Theme.t("Медленнее", "Slower") : Theme.t("Тише", "Lower volume");
+                        enabled: root.speed ? State.rate > 0.5 : State.volume > 0;
+                        clicked => { if (root.speed) { State.action("rate-down", ""); } else { State.set-volume(max(0, State.volume - 0.05)); } }
+                    }
+                    Label {
+                        text: root.speed ? round(State.rate * 100) / 100 + "×" : round(State.volume * 100) + "%";
+                        font-size: min(40px * Theme.font-scale, (root.width - 168px) / 3.4); font-weight: 600; color: Theme.accent; horizontal-alignment: center;
+                    }
+                    Action {
+                        text: "+"; min-width: 52px;
+                        accessible-label: root.speed ? Theme.t("Быстрее", "Faster") : Theme.t("Громче", "Raise volume");
+                        enabled: root.speed ? State.rate < 3 : State.volume < 1;
+                        clicked => { if (root.speed) { State.action("rate-up", ""); } else { State.set-volume(min(1, State.volume + 0.05)); } }
+                    }
+                }
+                VerticalLayout { spacing: 0px;
+                    slider := SeekBar {
+                        value: root.setting-value;
+                        step: root.speed ? 0.02 : 0.05;
+                        label: root.speed ? Theme.t("Скорость воспроизведения", "Playback speed") : Theme.t("Громкость", "Volume");
+                        changed(v) => { if (root.speed) { State.set-rate(round((0.5 + v * 2.5) * 20) / 20); } else { State.set-volume(v); } }
+                    }
+                    HorizontalLayout {
+                        Label { text: root.speed ? "0.5×" : "0%"; color: Theme.muted; font-size: 12px * Theme.font-scale; }
+                        Label { text: root.speed ? "3×" : "100%"; color: Theme.muted; font-size: 12px * Theme.font-scale; horizontal-alignment: right; }
+                    }
+                }
+                if root.speed: VerticalLayout { spacing: 8px;
+                    for rates in [[1, 1.25], [1.5, 2]]: HorizontalLayout { spacing: 8px;
+                        for rate in rates: Action {
+                            fill: true; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001;
+                            clicked => { State.set-rate(rate); }
+                        }
+                    }
+                }
+                if !root.speed: Action {
+                    fill: true; centered: true; selected: State.muted;
+                    icon: State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg");
+                    text: State.muted ? Theme.t("Включить звук", "Unmute") : Theme.t("Без звука", "Mute");
+                    clicked => { State.action("mute", ""); }
+                }
+            }
+        }
+        Action { fill: true; centered: true; primary: true; text: Theme.t("Готово", "Done"); clicked => { root.done(); } }
+    }
+}

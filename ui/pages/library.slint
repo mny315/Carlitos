@@ -1,0 +1,257 @@
+import { ListView, ComboBox } from "std-widgets.slint";
+import { State, BookItem } from "../state.slint";
+import { Theme } from "../components/theme.slint";
+import { Action, Label, Field, Meter, Cover, PlaybackIndicator } from "../components/controls.slint";
+
+component BookRow inherits Rectangle {
+    in property <BookItem> book;
+    row := Rectangle {
+        private property <bool> current: State.active && State.current.key == root.book.key;
+        private property <bool> playing: current && State.playing;
+        y: Theme.reduced-motion ? 0px : (root.book.move-offset * parent.height + State.books-move-scroll-y) * (1 - State.books-move-progress);
+        width: parent.width; height: parent.height; border-radius: 10px;
+        background: book-focus.has-focus || current ? Theme.tint : book-touch.has-hover ? Theme.surface : transparent;
+        animate background { duration: Theme.control-motion; }
+        accessible-role: button;
+        accessible-label: root.book.title + " · " + root.book.author + (playing ? Theme.t(" · Воспроизводится", " · Now playing") : current ? Theme.t(" · На паузе", " · Paused") : "");
+        accessible-action-default => { State.action("open-book", root.book.key); }
+        book-focus := FocusScope {
+            key-pressed(event) => {
+                if (event.text == Key.Return || event.text == " ") {
+                    State.action("open-book", root.book.key);
+                    return accept;
+                }
+                return reject;
+            }
+        }
+        book-touch := TouchArea {
+            clicked => { book-focus.focus(); Theme.haptic("button"); State.action("open-book", root.book.key); }
+        }
+        HorizontalLayout {
+            padding: 10px; spacing: 14px;
+            Cover { source: root.book.cover; initials: root.book.initials; variant: root.book.variant; width: State.compact ? 44px : 48px; height: 64px; }
+            VerticalLayout { spacing: 5px; alignment: center;
+                HorizontalLayout { spacing: 8px;
+                    if row.current: PlaybackIndicator { playing: row.playing; animation-enabled: State.page == 0; }
+                    Label { text: root.book.title; font-weight: 600; }
+                }
+                Label { text: root.book.author + (State.sort-index >= 3 && root.book.tags != "" ? " · " + root.book.tags : ""); color: Theme.muted; font-size: (13px) * Theme.font-scale; }
+                HorizontalLayout { spacing: 8px;
+                    Meter { value: root.book.progress; width: State.compact ? 45px : 82px; }
+                    Label { text: root.book.detail; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
+                }
+            }
+            HorizontalLayout {
+                spacing: State.android ? 0px : 14px;
+                horizontal-stretch: 0;
+                Action {
+                    icon: @image-url("../icons/more.svg"); quiet: true; selected: State.book-menu && State.menu-book.key == root.book.key;
+                    accessible-label: Theme.t("Действия с книгой: ", "Book actions: ") + root.book.title;
+                    clicked => { State.menu-book = root.book; State.book-menu-x = self.absolute-position.x + self.width; State.book-menu-y = self.absolute-position.y; State.book-menu = true; }
+                }
+                if State.android || !State.compact: Action {
+                    icon: row.playing ? @image-url("../icons/pause.svg") : root.book.completed && !State.android ? @image-url("../icons/check.svg") : @image-url("../icons/play.svg");
+                    quiet: true;
+                    selected: State.android && row.current;
+                    accessible-label: (row.playing ? Theme.t("Пауза: ", "Pause: ") : root.book.completed ? Theme.t("Слушать снова: ", "Play again: ") : root.book.started ? Theme.t("Продолжить: ", "Continue: ") : Theme.t("Слушать: ", "Play: ")) + root.book.title;
+                    clicked => { State.action("resume", root.book.key); }
+                }
+            }
+        }
+    }
+}
+
+component FilterAction inherits Action {
+    height: State.android ? max(40px, Theme.body + 12px) : Theme.action-height;
+}
+
+export component LibraryPage inherits VerticalLayout {
+    spacing: State.android ? 6px : State.compact ? 8px : 16px;
+    private property <length> book-row-height: max(84px, 30px + Theme.body * 3.4);
+    private property <int> transition-phase;
+    private property <int> next-filter;
+    private property <int> transition-direction;
+    private property <length> transition-origin;
+    private property <length> swipe-offset;
+    private property <bool> swipe-dragging;
+    private property <bool> touch-tracking;
+    private property <int> touch-finger;
+    private property <int> touch-axis;
+    private property <length> touch-start-x;
+    private property <length> touch-start-y;
+    private property <bool> swipe-enabled: State.android && State.page == 0 && State.overlay == 0 && !State.book-menu && !State.books-moving && transition-phase == 0;
+    private property <duration> transition-start;
+    private property <float> transition-progress: transition-phase == 0 ? 1 : clamp((animation-tick() - transition-start) / (transition-phase == 1 ? 100ms : 180ms), 0, 1);
+    private property <float> transition-eased: 1 - pow(1 - transition-progress, 3);
+    private property <int> selected-filter: transition-phase == 1 ? next-filter : State.filter;
+    // Android calls this before Slint dispatches to the scroll view or row.
+    // Window coordinates stay fixed while the content follows the finger.
+    // Phases: down, move, up, cancel. Consume only a claimed horizontal gesture.
+    public function touch(phase: int, finger: int, x: length, y: length) -> bool {
+        if (phase == 0) {
+            if (touch-tracking) {
+                let consumed = swipe-dragging;
+                root.release-swipe();
+                touch-tracking = false;
+                return consumed;
+            }
+            let position = library-body.absolute-position;
+            touch-tracking = swipe-enabled && x >= position.x && x < position.x + library-body.width && y >= position.y && y < position.y + library-body.height;
+            touch-start-x = x; touch-start-y = y;
+            touch-finger = finger; touch-axis = 0;
+            return false;
+        }
+        if (!touch-tracking || finger != touch-finger) { return false; }
+        let dx = x - touch-start-x;
+        let dy = y - touch-start-y;
+        if (phase == 3 || !swipe-enabled) {
+            let consumed = swipe-dragging;
+            root.release-swipe();
+            touch-tracking = false;
+            return consumed;
+        }
+        if (touch-axis == 0 && max(abs(dx), abs(dy)) >= 8px) {
+            touch-axis = abs(dx) > abs(dy) * 1.5 ? 1 : 2;
+        }
+        let consumed = touch-axis == 1;
+        if (phase == 1 && consumed) {
+            swipe-dragging = true;
+            swipe-offset = Theme.reduced-motion ? 0px : clamp(dx * ((State.filter == 0 && dx > 0px) || (State.filter == 2 && dx < 0px) ? 0.1 : 0.3), -48px, 48px);
+        }
+        if (phase == 2) {
+            touch-tracking = false;
+            if (consumed && abs(dx) >= 56px && abs(dx) > abs(dy) * 1.5) {
+                root.swipe-filter(dx < 0px ? 1 : -1, swipe-offset);
+            }
+            root.release-swipe();
+        }
+        return consumed;
+    }
+    function release-swipe() {
+        if (transition-phase == 0 && swipe-offset != 0px && !Theme.reduced-motion) {
+            transition-origin = swipe-offset;
+            transition-start = animation-tick();
+            transition-phase = 3;
+        }
+        swipe-dragging = false;
+        swipe-offset = 0px;
+    }
+    function apply-filter(index: int) {
+        State.filter = index;
+        State.search(State.query, index);
+        State.books-scroll-y = 0px;
+    }
+    function select-filter(index: int, origin: length) {
+        if (index < 0 || index > 2 || index == State.filter || transition-phase != 0) { return; }
+        if (Theme.reduced-motion) { root.apply-filter(index); return; }
+        next-filter = index;
+        transition-direction = index > State.filter ? 1 : -1;
+        transition-origin = origin;
+        transition-start = animation-tick();
+        transition-phase = 1;
+    }
+    function swipe-filter(direction: int, origin: length) {
+        let target = State.filter + direction;
+        if (target >= 0 && target <= 2) {
+            Theme.haptic("button");
+            root.select-filter(target, origin);
+        }
+    }
+    Timer {
+        interval: 16ms; running: root.transition-phase != 0;
+        triggered => {
+            if (root.transition-progress >= 1) {
+                if (root.transition-phase == 1) {
+                    root.apply-filter(root.next-filter);
+                    root.transition-start = animation-tick();
+                    root.transition-phase = 2;
+                } else { root.transition-phase = 0; }
+            }
+        }
+    }
+    public function focus-search() { State.search-open = true; search-field.focus(); }
+    if !State.compact: HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout { spacing: 4px;
+            Label { text: Theme.t("Библиотека", "Library"); font-size: (State.compact ? 26px : 30px) * Theme.font-scale; font-weight: 650; }
+            if !State.compact: Label { text: Theme.t("Хорошая история всегда рядом", "A good story, always within reach"); color: Theme.muted; }
+        }
+        Action { text: State.compact ? "" : Theme.t("Добавить книги", "Add books"); icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
+    }
+    Rectangle {
+        visible: !State.android || State.search-open;
+        height: self.visible ? search-field.height : 0px;
+        HorizontalLayout { spacing: 8px;
+            search-field := Field {
+                text <=> State.query;
+                placeholder: State.compact ? Theme.t("Найти книгу…", "Find a book…") : Theme.t("Поиск по названию или автору", "Search by title or author");
+                edited(s) => { State.search(s, State.filter); }
+            }
+            if State.android: Action {
+                icon: @image-url("../icons/close.svg"); quiet: true;
+                accessible-label: Theme.t("Закрыть поиск", "Close search");
+                clicked => { State.close-search(); }
+            }
+            if State.compact && !State.android: Action { icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
+        }
+    }
+    HorizontalLayout {
+        spacing: 4px;
+        if State.android: FilterAction {
+            icon: @image-url("../icons/sort.svg"); quiet: true; selected: State.overlay == 9;
+            accessible-label: Theme.t("Сортировка: ", "Sort by: ") + State.sort-labels[State.filter == 2 ? State.completed-sort-index + 1 : State.sort-index];
+            clicked => {
+                State.sort-menu-x = self.absolute-position.x;
+                State.sort-menu-y = self.absolute-position.y + self.height;
+                State.overlay = 9;
+            }
+        }
+        FilterAction { text: Theme.t("Все", "All"); quiet: true; selected: root.selected-filter == 0; clicked => { root.select-filter(0, 0px); } }
+        FilterAction { text: Theme.t("Начатые", "Started"); quiet: true; selected: root.selected-filter == 1; clicked => { root.select-filter(1, 0px); } }
+        FilterAction { text: Theme.t("Завершённые", "Completed"); quiet: true; selected: root.selected-filter == 2; clicked => { root.select-filter(2, 0px); } }
+        if !State.compact: Label { text: State.book-count; horizontal-alignment: right; color: Theme.muted; }
+    }
+    if !State.android: HorizontalLayout { height: 36px; spacing: 10px; alignment: start;
+        Label { text: Theme.t("Сортировка", "Sort by"); color: Theme.muted; horizontal-stretch: 0; }
+        if State.filter != 2: ComboBox { width: State.compact ? 200px : 220px; model: State.sort-labels; current-index <=> State.sort-index; selected(_) => { State.settings-changed(); } }
+        if State.filter == 2: ComboBox { width: State.compact ? 200px : 220px; model: [Theme.t("По названию", "Title"), Theme.t("По автору", "Author"), Theme.t("По году", "Year"), Theme.t("По жанру", "Genre")]; current-index <=> State.completed-sort-index; selected(_) => { State.sort-index = self.current-index + 1; State.settings-changed(); } }
+    }
+    library-body := Rectangle {
+        vertical-stretch: 1; clip: true;
+        accessible-role: tab-panel;
+        accessible-label: Theme.t("Книги", "Books");
+        FocusScope {
+            enabled: root.transition-phase == 0;
+            focus-on-tab-navigation: false;
+            x: root.transition-phase == 1 ? root.transition-origin + (-root.transition-direction * 48px - root.transition-origin) * root.transition-eased : root.transition-phase == 2 ? root.transition-direction * 48px * (1 - root.transition-eased) : root.transition-phase == 3 ? root.transition-origin * (1 - root.transition-eased) : root.swipe-offset;
+            y: 0px; width: parent.width; height: parent.height;
+            opacity: root.transition-phase == 1 ? 1 - root.transition-progress : root.transition-phase == 2 ? root.transition-progress : 1;
+            if State.books.length > 0 && !State.android: ListView {
+                content-y <=> State.books-scroll-y;
+                for book in State.books: BookRow { height: root.book-row-height; book: book; }
+            }
+            if State.books.length > 0 && State.android: Flickable {
+                width: parent.width; height: parent.height;
+                accessible-role: list;
+                content-y <=> State.books-scroll-y;
+                content-width: self.width;
+                content-height: State.books.length * root.book-row-height;
+                // Only instantiate visible rows, keeping long libraries cheap.
+                private property <int> first-row: max(0, floor(-self.content-y / root.book-row-height));
+                private property <int> row-count: max(0, min(State.books.length - first-row, ceil(self.height / root.book-row-height) + 2));
+                for i in self.row-count: BookRow {
+                    book: State.books[parent.first-row + i];
+                    y: (parent.first-row + i) * root.book-row-height;
+                    width: parent.width; height: root.book-row-height;
+                }
+            }
+            if State.books.length == 0: VerticalLayout {
+                alignment: center; spacing: State.compact ? 8px : 16px; vertical-stretch: 1;
+                if !State.compact: Image { source: @image-url("../icons/book.svg"); colorize: Theme.accent; height: 42px; }
+                Label { text: State.loading ? Theme.t("Открываем библиотеку…", "Opening your library…") : State.book-count > 0 ? Theme.t("Ничего не найдено", "No matching books") : Theme.t("Здесь начнётся история", "Your next story starts here"); horizontal-alignment: center; wrap: word-wrap; font-size: (State.compact ? 18px : 22px) * Theme.font-scale; font-weight: 600; }
+                Label { text: State.book-count > 0 ? Theme.t("Измените поиск или фильтр", "Try another search or filter") : Theme.t("Добавьте папку с аудиокнигами", "Add a folder of audiobooks"); horizontal-alignment: center; wrap: word-wrap; color: Theme.muted; font-size: State.compact ? 12px * Theme.font-scale : Theme.body; }
+                if State.book-count == 0 && !State.compact: HorizontalLayout { alignment: center; Action { text: Theme.t("Выбрать папку", "Choose a folder"); icon: @image-url("../icons/plus.svg"); primary: true; clicked => { State.page = 2; State.choose-folder(); } } }
+            }
+        }
+    }
+}

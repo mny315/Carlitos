@@ -1,0 +1,44 @@
+name: Windows
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: x86_64-pc-windows-msvc
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --locked --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+      - name: Sonic native checks
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC tools were not found' }
+          New-Item -ItemType Directory -Force target | Out-Null
+          cmd /c "call `"$vs/VC/Auxiliary/Build/vcvars64.bat`" >nul && cl /nologo /O2 /MT tests/support/sonic.c /Fetarget/sonic-tests.exe /Fotarget/sonic-tests.obj && target\sonic-tests.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Sonic native checks failed' }
+      - name: Test and build
+        shell: pwsh
+        run: ./scripts/windows.ps1
+      - name: Verify system-only imports
+        run: python tests/windows/package.py target/x86_64-pc-windows-msvc/release/carlitos.exe
+      - name: Installer lifecycle
+        shell: pwsh
+        run: ./tests/windows/installer.ps1 -Installer (Resolve-Path target/releases/Carlitos.exe).Path
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Carlitos-windows-x64-installer
+          path: |
+            target/releases/Carlitos.exe
+            target/releases/Carlitos.exe.sha256
+          if-no-files-found: error

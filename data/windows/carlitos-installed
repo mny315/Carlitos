@@ -1,0 +1,3 @@
+Carlitos installer deployment.
+Library, settings and cache are stored in the user's Local AppData\Carlitos folder.
+The portable distribution contains only Carlitos.exe and does not include this file.
