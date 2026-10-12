@@ -143,7 +143,9 @@ mod tests {
         assert_eq!(display_path(&format!("{provider}/tree/primary%3A")), "/");
         let file = std::env::current_dir()
             .unwrap()
-            .join("Audiobooks/Book + 1/part.mp3");
+            .join("Audiobooks")
+            .join("Book + 1")
+            .join("part.mp3");
         assert_eq!(
             display_path(&crate::library::file_uri(&file).unwrap()),
             file.display().to_string()
