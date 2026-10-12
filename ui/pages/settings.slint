@@ -99,19 +99,65 @@ export component SettingsPage inherits Rectangle {
 }
 export component SourcesPage inherits VerticalLayout {
     spacing: 16px;
-    Label { text: Theme.t("Источники", "Sources"); font-size: (28px) * Theme.font-scale; font-weight: 650; }
-    if !State.compact: Label { text: Theme.t("Список аудиокниг", "Audiobook list"); color: Theme.muted; wrap: word-wrap; }
-    ListView { for source in State.sources: VerticalLayout {
-        padding-top: State.compact ? 4px : 12px; padding-bottom: State.compact ? 8px : 18px; spacing: 8px;
-        Label { text: source.path; font-size: (13px) * Theme.font-scale; wrap: word-wrap; }
-        Label { text: source.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
-        HorizontalLayout { spacing: 6px; alignment: start;
-            Action { text: Theme.t("Обновить…", "Update…"); icon: @image-url("../icons/refresh.svg"); enabled: !State.source-busy; clicked => { State.action("begin-source-edit", source.key); } }
-            Action { icon: @image-url("../icons/trash.svg"); destructive: true; enabled: !State.source-busy; accessible-label: Theme.t("Удалить источник", "Remove source"); clicked => { State.remove-key = source.key; State.remove-kind = "source"; State.overlay = 1; } }
+    HorizontalLayout { spacing: 8px;
+        Label { text: Theme.t("Источники", "Sources"); font-size: (28px) * Theme.font-scale; font-weight: 650; }
+        Action {
+            text: State.source-selection ? Theme.t("Отмена", "Cancel") : Theme.t("Выбрать", "Select");
+            icon: State.source-selection ? @image-url("../icons/close.svg") : @image-url("../icons/check.svg");
+            accessible-label: State.source-selection ? Theme.t("Отменить выбор источников", "Cancel source selection") : Theme.t("Выбрать источники", "Select sources");
+            enabled: State.sources.length > 0;
+            clicked => { State.action(State.source-selection ? "clear-source-selection" : "select-sources", ""); }
         }
-    } }
+    }
+    if !State.compact: Label { text: Theme.t("Список аудиокниг", "Audiobook list"); color: Theme.muted; wrap: word-wrap; }
+    if State.source-selection: HorizontalLayout { spacing: 8px;
+        Toggle {
+            text: Theme.t("Выбрать все", "Select all");
+            checked: State.sources.length > 0 && State.selected-source-count == State.sources.length;
+            toggled => { State.action(self.checked ? "select-all-sources" : "deselect-sources", ""); }
+        }
+        Label { text: Theme.t("Выбрано: ", "Selected: ") + State.selected-source-count; color: Theme.muted; horizontal-alignment: right; }
+    }
     if State.source-busy: BusyStatus { text: Theme.t("Обновляем источник…", "Updating source…"); }
-    HorizontalLayout { alignment: start; Action { text: Theme.t("Добавить папку", "Add a folder"); icon: @image-url("../icons/plus.svg"); primary: true; clicked => { State.page = 2; } } }
+    Rectangle {
+        vertical-stretch: 1;
+        ListView {
+            width: parent.width; height: parent.height;
+            for source[index] in State.sources: VerticalLayout {
+                padding-top: State.compact ? 4px : 12px;
+                // The final row can scroll clear of the floating action.
+                padding-bottom: (State.compact ? 8px : 18px) + (index == State.sources.length - 1 ? Theme.action-height + 24px : 0px);
+                spacing: 8px;
+                if State.source-selection: Toggle {
+                    text: source.path; description: source.detail;
+                    accessible-label: Theme.t("Выбрать источник: ", "Select source: ") + source.path;
+                    checked: source.selected;
+                    background: source.selected ? Theme.tint : transparent;
+                    toggled => { State.action("select-source", source.key); }
+                }
+                if !State.source-selection: Label { text: source.path; font-size: (13px) * Theme.font-scale; wrap: word-wrap; }
+                if !State.source-selection: Label { text: source.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+                if !State.source-selection: HorizontalLayout { spacing: 6px; alignment: start;
+                    Action { text: Theme.t("Обновить…", "Update…"); icon: @image-url("../icons/refresh.svg"); enabled: !State.source-busy; clicked => { State.action("begin-source-edit", source.key); } }
+                    Action { icon: @image-url("../icons/trash.svg"); destructive: true; enabled: !State.source-busy; accessible-label: Theme.t("Удалить источник", "Remove source"); clicked => { State.remove-key = source.key; State.remove-kind = "source"; State.overlay = 1; } }
+                }
+            }
+        }
+        Action {
+            x: parent.width - self.width - 4px; y: max(0px, parent.height - self.height - 12px);
+            width: min(parent.width - 8px, self.preferred-width);
+            text: State.source-selection ? Theme.t("Удалить выбранные", "Remove selected") : Theme.t("Добавить папку", "Add a folder");
+            icon: State.source-selection ? @image-url("../icons/trash.svg") : @image-url("../icons/plus.svg");
+            primary: !State.source-selection; destructive: State.source-selection;
+            enabled: !State.source-selection || (State.selected-source-count > 0 && !State.source-busy);
+            border-radius: 14px;
+            drop-shadow-blur: 8px; drop-shadow-offset-y: 2px; drop-shadow-color: #00000028;
+            clicked => {
+                if (State.source-selection) { State.action("confirm-remove-sources", ""); }
+                else { State.navigate(2); }
+            }
+        }
+    }
 }
 component ShortcutRow inherits HorizontalLayout {
     in property <string> keys;
@@ -139,7 +185,7 @@ export component AboutPage inherits ScrollView {
             Image { source: @image-url("../../data/icons/io.github.mny315.Carlitos.svg"); width: 80px; height: 80px; }
             VerticalLayout { alignment: center; spacing: 6px;
                 Label { text: "Carlitos"; font-size: (32px) * Theme.font-scale; font-weight: 650; }
-                Label { text: Theme.t("Версия 1.0.1", "Version 1.0.1"); color: Theme.muted; }
+                Label { text: Theme.t("Версия 1.0.2", "Version 1.0.2"); color: Theme.muted; }
             }
         }
         Label { text: Theme.t("Ваши книги. Ваш ритм.", "Your books. Your pace."); font-size: (21px) * Theme.font-scale; font-weight: 600; horizontal-alignment: center; wrap: word-wrap; }

@@ -6,7 +6,7 @@ import androidx.media3.common.util.UnstableApi
 
 @UnstableApi
 internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = false, inputOnly: Boolean = false,
-    pauseOnly: Boolean = false, requireBluetooth: Boolean = false) {
+    pauseOnly: Boolean = false, requireBluetooth: Boolean = false, sourceSelectionOnly: Boolean = false) {
     check(instrumentation.targetContext.packageName.endsWith(".playbacktest"))
     val originalFont = shell("settings get system font_scale")
     val originalSize = shell("wm size").lineSequence().firstOrNull { it.startsWith("Override size:") }?.substringAfter(":")?.trim()
@@ -21,6 +21,11 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         instrumentation.startActivitySync(Intent(instrumentation.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         main { Bridge.activity.get()!!.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
         eventually("UI startup") { try { call().getDouble("width") > 0 } catch (_: Exception) { false } }
+        if (sourceSelectionOnly || (!libraryOnly && !chaptersOnly && !inputOnly && !pauseOnly)) {
+            call("setup")
+            sourceSelectionChecks()
+            if (sourceSelectionOnly) return
+        }
         grantFixtures(instrumentation, ui = true)
         if (!libraryOnly && !chaptersOnly && !inputOnly && !pauseOnly) DocumentChecks(instrumentation).apply { fixtures(); slice(); largeAudioPacket(); timeouts() }
         PlaybackSuite(instrumentation).fixture(title, listOf("tone", "part2"))

@@ -225,12 +225,8 @@ pub(super) fn step(
                 "single-book sources use the singular form",
             );
             snapshot(&w, "sources");
-            let (x, y) = if s.get_compact() {
-                (80., 181.)
-            } else {
-                (285., 190.)
-            };
-            click(&w, x, y);
+            super::super::sources::selection_checks(&w, view);
+            s.invoke_action("begin-source-edit".into(), "100".into());
         }
         14 => {
             check(

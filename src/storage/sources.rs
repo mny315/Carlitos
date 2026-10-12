@@ -20,48 +20,14 @@ impl Store {
         }
     }
     pub fn remove_source(&mut self, id: Id) -> Result<Library> {
+        self.remove_sources(&[id])
+    }
+    /// Commit the complete selection together, including overlapping sources.
+    pub fn remove_sources(&mut self, ids: &[Id]) -> Result<Library> {
         let tx = self.conn.transaction()?;
-        let document_links: Vec<Id> = tx.prepare("SELECT m.id FROM media_files m JOIN source_files sf ON sf.file_id=m.id WHERE sf.source_id=?1 AND m.uri LIKE 'content:%'")?
-            .query_map([id], |r| r.get(0))?.collect::<Result<_, _>>()?;
-        tx.execute("DELETE FROM books WHERE source_id=?1", [id])?;
-        tx.execute("DELETE FROM source_files WHERE source_id=?1", [id])?;
-        // Overlapping imports can add this source's files to another book.
-        // Remove only parts with no remaining source; shared files keep their IDs.
-        tx.execute("DELETE FROM book_parts WHERE file_id IN (SELECT id FROM media_files WHERE source_id=?1 AND NOT EXISTS(SELECT 1 FROM source_files WHERE file_id=media_files.id))", [id])?;
-        tx.execute("DELETE FROM media_files WHERE NOT EXISTS(SELECT 1 FROM source_files WHERE file_id=media_files.id) AND NOT EXISTS(SELECT 1 FROM book_parts WHERE file_id=media_files.id)",[])?;
-        let mut remaining: Vec<(Id, Id, String, String)> = tx.prepare(
-            "SELECT m.id,s.id,s.uri,sf.relative FROM media_files m JOIN source_files sf ON sf.file_id=m.id JOIN sources s ON s.id=sf.source_id WHERE m.source_id=?1 AND sf.source_id=(SELECT MIN(source_id) FROM source_files WHERE file_id=m.id)",
-        )?.query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
-        // A recent overlapping import may have renewed the URI through the
-        // removed grant without changing the original owner of the recording.
-        for file in document_links {
-            if remaining.iter().any(|(id, _, _, _)| *id == file) {
-                continue;
-            }
-            use rusqlite::OptionalExtension;
-            if let Some(link) = tx.query_row(
-                "SELECT m.id,s.id,s.uri,sf.relative FROM media_files m JOIN source_files sf ON sf.file_id=m.id JOIN sources s ON s.id=sf.source_id WHERE m.id=?1 ORDER BY sf.source_id=m.source_id DESC,sf.source_id LIMIT 1",
-                [file], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            ).optional()? { remaining.push(link); }
+        for &id in ids {
+            remove_source_records(&tx, id)?;
         }
-        for (file, source, root, relative) in remaining {
-            let uri = if let Some(root) = local_path(&root) {
-                file_uri(&root.join(&relative))?
-            } else {
-                let uri: String =
-                    tx.query_row("SELECT uri FROM media_files WHERE id=?1", [file], |r| {
-                        r.get(0)
-                    })?;
-                crate::source::document_uri_in_source(&uri, &root)?
-            };
-            // Shared files must now resolve through a surviving source, even
-            // when the removed source was an independent hardlink alias.
-            tx.execute(
-                "UPDATE media_files SET source_id=?1,relative=?2,uri=?3 WHERE id=?4",
-                params![source, relative, uri, file],
-            )?;
-        }
-        tx.execute("DELETE FROM sources WHERE id=?1", [id])?;
         save_session(&tx, &load_session(&tx)?)?;
         tx.commit()?;
         self.load()
@@ -222,4 +188,49 @@ impl Store {
         tx.commit()?;
         self.load()
     }
+}
+
+fn remove_source_records(tx: &rusqlite::Transaction<'_>, id: Id) -> Result<()> {
+    let document_links: Vec<Id> = tx.prepare("SELECT m.id FROM media_files m JOIN source_files sf ON sf.file_id=m.id WHERE sf.source_id=?1 AND m.uri LIKE 'content:%'")?
+        .query_map([id], |r| r.get(0))?.collect::<Result<_, _>>()?;
+    tx.execute("DELETE FROM books WHERE source_id=?1", [id])?;
+    tx.execute("DELETE FROM source_files WHERE source_id=?1", [id])?;
+    // Overlapping imports can add this source's files to another book.
+    // Remove only parts with no remaining source; shared files keep their IDs.
+    tx.execute("DELETE FROM book_parts WHERE file_id IN (SELECT id FROM media_files WHERE source_id=?1 AND NOT EXISTS(SELECT 1 FROM source_files WHERE file_id=media_files.id))", [id])?;
+    tx.execute("DELETE FROM media_files WHERE NOT EXISTS(SELECT 1 FROM source_files WHERE file_id=media_files.id) AND NOT EXISTS(SELECT 1 FROM book_parts WHERE file_id=media_files.id)",[])?;
+    let mut remaining: Vec<(Id, Id, String, String)> = tx.prepare(
+        "SELECT m.id,s.id,s.uri,sf.relative FROM media_files m JOIN source_files sf ON sf.file_id=m.id JOIN sources s ON s.id=sf.source_id WHERE m.source_id=?1 AND sf.source_id=(SELECT MIN(source_id) FROM source_files WHERE file_id=m.id)",
+    )?.query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
+    // A recent overlapping import may have renewed the URI through the
+    // removed grant without changing the original owner of the recording.
+    for file in document_links {
+        if remaining.iter().any(|(id, _, _, _)| *id == file) {
+            continue;
+        }
+        use rusqlite::OptionalExtension;
+        if let Some(link) = tx.query_row(
+            "SELECT m.id,s.id,s.uri,sf.relative FROM media_files m JOIN source_files sf ON sf.file_id=m.id JOIN sources s ON s.id=sf.source_id WHERE m.id=?1 ORDER BY sf.source_id=m.source_id DESC,sf.source_id LIMIT 1",
+            [file], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        ).optional()? { remaining.push(link); }
+    }
+    for (file, source, root, relative) in remaining {
+        let uri = if let Some(root) = local_path(&root) {
+            file_uri(&root.join(&relative))?
+        } else {
+            let uri: String =
+                tx.query_row("SELECT uri FROM media_files WHERE id=?1", [file], |r| {
+                    r.get(0)
+                })?;
+            crate::source::document_uri_in_source(&uri, &root)?
+        };
+        // Shared files must now resolve through a surviving source, even
+        // when the removed source was an independent hardlink alias.
+        tx.execute(
+            "UPDATE media_files SET source_id=?1,relative=?2,uri=?3 WHERE id=?4",
+            params![source, relative, uri, file],
+        )?;
+    }
+    tx.execute("DELETE FROM sources WHERE id=?1", [id])?;
+    Ok(())
 }

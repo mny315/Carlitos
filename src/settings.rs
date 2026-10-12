@@ -28,7 +28,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             version: 1,
-            theme: "dark".into(),
+            theme: "system".into(),
             language: "system".into(),
             close_to_tray: true,
             playback_rate: 1.0,
@@ -50,7 +50,7 @@ impl Settings {
             bail!("Unsupported settings version: {}", self.version);
         }
         if !["dark", "light", "system"].contains(&self.theme.as_str()) {
-            self.theme = "dark".into();
+            self.theme = "system".into();
         }
         if !["ru", "en", "system"].contains(&self.language.as_str()) {
             self.language = "system".into();

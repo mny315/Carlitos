@@ -1,11 +1,10 @@
 use super::View;
 use crate::{
-    SourceItem, State,
+    State,
     app::{Event, text},
-    library::{Target, local_path},
+    library::Target,
 };
-use slint::{ComponentHandle, VecModel};
-use std::rc::Rc;
+use slint::ComponentHandle;
 
 impl View {
     pub fn event(&mut self, event: Event) {
@@ -59,24 +58,7 @@ impl View {
                         self.library.active_file().and_then(|file| file.duration),
                     );
                 }
-                let source_counts = self.library.source_book_counts();
-                let sources: Vec<_> = self
-                    .library
-                    .sources
-                    .iter()
-                    .map(|s| SourceItem {
-                        key: s.id.to_string().into(),
-                        path: local_path(&s.uri)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|| s.uri.clone())
-                            .into(),
-                        detail: crate::i18n::book_count(
-                            source_counts.get(&s.id).copied().unwrap_or(0),
-                        )
-                        .into(),
-                    })
-                    .collect();
-                state.set_sources(Rc::new(VecModel::from(sources)).into());
+                self.refresh_sources();
             }
             Event::Playback(p) => {
                 self.playback = p;

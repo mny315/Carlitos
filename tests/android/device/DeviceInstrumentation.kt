@@ -40,6 +40,7 @@ class DeviceInstrumentation : Instrumentation() {
     private var playback = false
     private var ui = false
     private var libraryOnly = false
+    private var sourceSelectionOnly = false
     private var chaptersOnly = false
     private var inputOnly = false
     private var pauseOnly = false
@@ -59,6 +60,7 @@ class DeviceInstrumentation : Instrumentation() {
         playback = arguments?.getString("suite") == "playback"
         ui = arguments?.getString("suite") == "ui"
         libraryOnly = arguments?.getString("library-only") == "true"
+        sourceSelectionOnly = arguments?.getString("source-selection-only") == "true"
         chaptersOnly = arguments?.getString("chapters-only") == "true"
         inputOnly = arguments?.getString("input-only") == "true"
         pauseOnly = arguments?.getString("pause-only") == "true"
@@ -133,7 +135,7 @@ class DeviceInstrumentation : Instrumentation() {
                 return
             }
             if (ui) {
-                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly, pauseOnly, requireBluetooth)
+                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly, pauseOnly, requireBluetooth, sourceSelectionOnly)
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android UI tests\n") })
                 return
             }

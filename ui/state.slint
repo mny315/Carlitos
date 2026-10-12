@@ -1,9 +1,10 @@
 export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, move-offset: float }
 export struct PartItem { key: string, title: string, detail: string, number: string, active: bool, chapter: bool }
 export struct ImportItem { title: string, author: string, detail: string, included: bool }
-export struct SourceItem { key: string, path: string, detail: string }
+export struct SourceItem { key: string, path: string, detail: string, selected: bool }
 import { Theme } from "components/theme.slint";
 export global State {
+    pure callback display-path(string) -> string;
     out property <[string]> sort-labels: [Theme.t("Сначала начатые", "Started first"), Theme.t("По названию", "Title"), Theme.t("По автору", "Author"), Theme.t("По году", "Year"), Theme.t("По жанру", "Genre")];
     out property <[string]> theme-labels: [Theme.t("Тёмная тема", "Dark theme"), Theme.t("Светлая тема", "Light theme"), Theme.t("Как в системе", "System theme")];
     out property <[string]> language-labels: [Theme.t("Язык системы", "System language"), "Русский", "English"];
@@ -37,6 +38,8 @@ export global State {
     in-out property <[ImportItem]> drafts;
     in-out property <[PartItem]> draft-files;
     in-out property <[SourceItem]> sources;
+    in-out property <bool> source-selection;
+    in-out property <int> selected-source-count;
     in-out property <int> book-count;
     in-out property <BookItem> selected;
     in-out property <BookItem> current;
@@ -71,7 +74,7 @@ export global State {
     in-out property <int> selected-draft: -1;
     in-out property <string> draft-title;
     in-out property <string> draft-author;
-    in-out property <int> theme-index: 0;
+    in-out property <int> theme-index: 2;
     in-out property <int> language-index: 0;
     in-out property <int> text-size-percent: 100;
     in-out property <int> ui-scale-percent: 100;
@@ -92,6 +95,7 @@ export global State {
     in-out property <string> source-error;
     in-out property <string> remove-key;
     in-out property <string> remove-kind;
+    in-out property <int> remove-source-count;
     in-out property <bool> book-menu: false;
     in-out property <BookItem> menu-book;
     in-out property <length> book-menu-x;
@@ -117,12 +121,16 @@ export global State {
     callback choose-cover;
     callback draft-changed(int, string, string, bool);
     callback draft-file-action(int, string);
-    public function navigate(page: int) { self.page = page; self.book-menu = false; }
+    public function navigate(page: int) {
+        if (self.page == 4 && page != 4 && source-selection) { action("clear-source-selection", ""); }
+        self.page = page; self.book-menu = false;
+    }
     public function close-search() { search-open = false; query = ""; search("", filter); }
     // Shared by Android's gesture/button Back and mobile keyboard navigation.
     public function mobile-back() -> bool {
         if (overlay != 0) { overlay = 0; return true; }
         if (book-menu) { book-menu = false; return true; }
+        if (page == 4 && source-selection) { action("clear-source-selection", ""); return true; }
         if (page == 1 && reorder) { reorder = false; return true; }
         if (page == 2 && selected-draft >= 0) { selected-draft = -1; return true; }
         if (page != 0) {

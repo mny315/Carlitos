@@ -7,9 +7,10 @@ mod events;
 mod imports;
 mod playback;
 mod preferences;
+mod sources;
 
 use super::{Command, audio::Playback};
-use crate::{AppWindow, PartItem, State};
+use crate::{AppWindow, PartItem, SourceItem, State};
 use crate::{library::*, settings::Settings, storage::Draft};
 use book_model::BookModel;
 pub use covers::CoverResult;
@@ -18,7 +19,12 @@ use covers::Covers;
 pub(crate) use editor::SavedEditor;
 pub use editor::renew_picker_owner;
 use slint::{ComponentHandle, ModelRc, VecModel};
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::mpsc::Sender};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashMap},
+    rc::Rc,
+    sync::mpsc::Sender,
+};
 
 pub struct View {
     window: slint::Weak<AppWindow>,
@@ -26,6 +32,9 @@ pub struct View {
     library: Library,
     books: Rc<BookModel>,
     parts: Rc<VecModel<PartItem>>,
+    sources: Rc<VecModel<SourceItem>>,
+    selected_sources: BTreeSet<Id>,
+    pending_source_removal: Vec<Id>,
     covers: Rc<Covers>,
     by_book: HashMap<Id, Vec<usize>>,
     by_media: HashMap<Id, usize>,
@@ -60,10 +69,12 @@ impl View {
         let (covers, receiver) = Covers::new();
         let books = Rc::new(BookModel::new(covers.clone()));
         let parts = Rc::new(VecModel::default());
+        let sources = Rc::new(VecModel::default());
         window
             .global::<State>()
             .set_books(ModelRc::from(books.clone()));
         window.global::<State>().set_parts(parts.clone().into());
+        window.global::<State>().set_sources(sources.clone().into());
         let filter = i32::from(settings.library_tab == "started");
         window.global::<State>().set_filter(filter);
         let view = Rc::new(RefCell::new(Self {
@@ -72,6 +83,9 @@ impl View {
             library: Library::default(),
             books,
             parts,
+            sources,
+            selected_sources: BTreeSet::new(),
+            pending_source_removal: vec![],
             covers,
             by_book: HashMap::new(),
             by_media: HashMap::new(),

@@ -68,6 +68,7 @@ impl Controller {
                         | ResetProgress(_)
                         | RemoveBook(_)
                         | RemoveSource(_)
+                        | RemoveSources(_)
                         | Relocate(..)
                         | Rescan(_)
                         | Scan(..)
@@ -86,7 +87,12 @@ impl Controller {
             && (imports_document
                 || matches!(
                     command,
-                    RemoveBook(_) | RemoveSource(_) | ResetProgress(_) | Relocate(..) | Import
+                    RemoveBook(_)
+                        | RemoveSource(_)
+                        | RemoveSources(_)
+                        | ResetProgress(_)
+                        | Relocate(..)
+                        | Import
                 ))
         {
             bail!(
@@ -208,6 +214,12 @@ impl Controller {
             RemoveSource(id) => {
                 self.save()?;
                 let library = self.store()?.remove_source(id)?;
+                self.reconcile(library);
+                self.save()?;
+            }
+            RemoveSources(ids) => {
+                self.save()?;
+                let library = self.store()?.remove_sources(&ids)?;
                 self.reconcile(library);
                 self.save()?;
             }

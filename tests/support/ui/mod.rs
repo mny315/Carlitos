@@ -5,6 +5,7 @@ mod parts;
 mod scenarios;
 mod self_test;
 mod sliders;
+mod sources;
 
 pub use exercise::exercise;
 pub use scenarios::{library_tab, portal, system_theme};

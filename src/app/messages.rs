@@ -42,6 +42,7 @@ pub enum Command {
     TagsRead(Vec<(Media, BookTags)>),
     RemoveBook(Id),
     RemoveSource(Id),
+    RemoveSources(Vec<Id>),
     Relocate(Id, Location),
     Rescan(Id),
     Scan(Location, bool),

@@ -117,7 +117,8 @@ export component AppDialog inherits Rectangle {
                 }
                 if !State.android: Label { text: Theme.t("От 0,5× до 3× · шаг 0,05×", "0.5× to 3× · step 0.05×"); color: Theme.muted; wrap: word-wrap; horizontal-alignment: center; }
             }
-            if root.dialog-kind == 1: Label { text: Theme.t("Исходные аудиофайлы останутся на месте. Прогресс этой записи будет удалён.", "Original audio files will stay untouched. Progress for this entry will be removed."); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 1 && State.remove-kind == "sources": Label { text: Theme.t("Источников выбрано: ", "Selected sources: ") + State.remove-source-count; font-weight: 600; wrap: word-wrap; }
+            if root.dialog-kind == 1: Label { text: State.remove-kind == "sources" ? Theme.t("Выбранные источники и их книги будут удалены из библиотеки вместе с прогрессом. Исходные аудиофайлы останутся на месте.", "Selected sources and their books will be removed from the library along with listening progress. Original audio files will stay untouched.") : Theme.t("Исходные аудиофайлы останутся на месте. Прогресс этой записи будет удалён.", "Original audio files will stay untouched. Progress for this entry will be removed."); wrap: word-wrap; color: Theme.muted; }
             if root.dialog-kind == 2: Field { text <=> State.edit-title; placeholder: Theme.t("Название", "Title"); }
             if root.dialog-kind == 2: Field { text <=> State.edit-author; placeholder: Theme.t("Автор", "Author"); }
             if root.dialog-kind == 2 && State.android: HorizontalLayout { alignment: center;
@@ -136,7 +137,8 @@ export component AppDialog inherits Rectangle {
             if root.dialog-kind == 3: Label { text: Theme.t("Время текущей части: мм:сс или чч:мм:сс", "Time in this part: mm:ss or hh:mm:ss"); wrap: word-wrap; color: Theme.muted; }
             if root.dialog-kind == 3: Field { text <=> State.exact-time; placeholder: "00:00"; accepted(s) => { State.action("exact-time", s); } }
             if root.dialog-kind == 5: HorizontalLayout { spacing: 8px;
-                Field { text <=> State.relocate-path; read-only: State.source-busy || State.android; placeholder: Theme.t("Путь к папке", "Folder path"); }
+                if !State.android: Field { text <=> State.relocate-path; read-only: State.source-busy; placeholder: Theme.t("Путь к папке", "Folder path"); }
+                if State.android: Label { text: State.display-path(State.relocate-path); wrap: word-wrap; }
                 Action { icon: @image-url("../icons/folder.svg"); enabled: !State.source-busy && !State.picker-busy; accessible-label: Theme.t("Выбрать папку источника", "Choose source folder"); clicked => { State.choose-source-folder(); } }
             }
             if root.dialog-kind == 5: Label { text: Theme.t("Найдём новые книги и обновим сведения. Если папка перемещена, выберите её новое расположение — прогресс сохранится.", "Find new books and refresh their details. If the folder moved, choose its new location — listening progress is kept."); wrap: word-wrap; color: Theme.muted; }

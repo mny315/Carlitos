@@ -85,6 +85,12 @@ fn request(request: Value) -> Result<Value> {
             "haptic_ticks":HAPTIC_TICKS.get(),"notice":s.get_notice().as_str(),"scanning":s.get_scanning(),
             "scale":w.window().scale_factor(),"width":size.width,"height":size.height});
         snapshot["picker_owner"] = json!(s.get_picker_owner().as_str());
+        snapshot["source_selection"] = json!(s.get_source_selection());
+        snapshot["selected_source_count"] = json!(s.get_selected_source_count());
+        snapshot["remove_source_count"] = json!(s.get_remove_source_count());
+        snapshot["sources"] = json!(s.get_sources().iter().map(|row| json!({
+            "key":row.key.as_str(),"path":row.path.as_str(),"selected":row.selected
+        })).collect::<Vec<_>>());
         Ok(snapshot)
     })
 }

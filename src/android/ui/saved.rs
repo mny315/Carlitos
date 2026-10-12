@@ -15,6 +15,8 @@ struct SavedUi {
     picker_owner: String,
     editor: Option<app::view::SavedEditor>,
     source: Option<SavedSource>,
+    source_selection: bool,
+    selected_sources: Vec<String>,
     exact_time: String,
     import_path: String,
     import_folder_name: String,
@@ -46,6 +48,13 @@ pub(super) fn save(ui: &app::Ui) {
             path: s.get_relocate_path().into(),
             error: s.get_source_error().into(),
         }),
+        source_selection: s.get_source_selection(),
+        selected_sources: s
+            .get_sources()
+            .iter()
+            .filter(|row| row.selected)
+            .map(|row| row.key.to_string())
+            .collect(),
         exact_time: s.get_exact_time().into(),
         import_path: s.get_import_path().into(),
         import_folder_name: s.get_import_folder_name().into(),
@@ -104,6 +113,12 @@ pub fn restore() {
             },
         );
         s.set_reorder(saved.reorder);
+        if saved.page == 4 && saved.source_selection {
+            s.invoke_action("select-sources".into(), "".into());
+            for key in saved.selected_sources {
+                s.invoke_action("select-source".into(), key.into());
+            }
+        }
         s.set_books_scroll_y(saved.scroll);
         s.set_exact_time(saved.exact_time.into());
         s.set_import_path(saved.import_path.into());

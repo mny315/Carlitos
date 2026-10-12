@@ -9,6 +9,7 @@ use std::{cell::RefCell, rc::Rc};
 impl View {
     pub(super) fn bind(view: &Rc<RefCell<Self>>, window: &AppWindow) {
         let state = window.global::<State>();
+        state.on_display_path(|uri| crate::source::display_path(uri.as_str()).into());
         let weak = Rc::downgrade(view);
         state.on_search(move |q, f| {
             if let Some(v) = weak.upgrade() {
@@ -165,6 +166,13 @@ impl View {
             "reset-progress" => id.map(Command::ResetProgress),
             "remove-book" => id.map(Command::RemoveBook),
             "remove-source" => id.map(Command::RemoveSource),
+            "select-sources"
+            | "select-source"
+            | "select-all-sources"
+            | "deselect-sources"
+            | "clear-source-selection"
+            | "confirm-remove-sources"
+            | "remove-sources" => self.source_selection_action(action, arg),
             "rescan" => id.map(Command::Rescan),
             "update-source" => id.and_then(|id| {
                 let source = self.library.sources.iter().find(|s| s.id == id)?;

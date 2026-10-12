@@ -1,5 +1,5 @@
 //! The two source locations supported by the application. Document IDs are
-//! opaque: never turn a content URI into a filesystem path.
+//! opaque: never use a content URI's display path for filesystem access.
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
@@ -34,6 +34,30 @@ impl Location {
 /// Equivalent tree and single-document URIs have the same identity. Encoding
 /// the pair as JSON avoids collisions when IDs contain separators or Unicode.
 pub fn document_identity(uri: &str) -> Option<String> {
+    let (authority, id) = document_parts(uri)?;
+    Some(format!("saf:{}", serde_json::json!([authority, id])))
+}
+
+/// A readable location for UI labels only. ExternalStorageProvider IDs contain
+/// a volume and a relative path; other providers' IDs must remain opaque.
+pub fn display_path(uri: &str) -> String {
+    if let Some(path) = crate::library::local_path(uri) {
+        return path.display().to_string();
+    }
+    if let Some((authority, id)) = document_parts(uri)
+        && authority == "com.android.externalstorage.documents"
+        && let Some((volume, relative)) = id.split_once(':')
+        && !volume.is_empty()
+    {
+        if volume == "primary" {
+            return if relative.is_empty() { "/" } else { relative }.to_owned();
+        }
+        return format!("{volume}:/{relative}");
+    }
+    uri.to_owned()
+}
+
+fn document_parts(uri: &str) -> Option<(String, String)> {
     let uri = url::Url::parse(uri).ok()?;
     if uri.scheme() != "content" {
         return None;
@@ -55,7 +79,7 @@ pub fn document_identity(uri: &str) -> Option<String> {
     if decoded.is_empty() {
         return None;
     }
-    Some(format!("saf:{}", serde_json::json!([authority, decoded])))
+    Some((authority.to_owned(), decoded))
 }
 
 /// Reuse a surviving grant for a document already linked to that source.
@@ -98,6 +122,43 @@ pub(crate) fn document_uri_in_source(document: &str, source: &str) -> Result<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn display_paths_decode_primary_paths_and_distinguish_removable_volumes() {
+        let provider = "content://com.android.externalstorage.documents";
+        let id = "primary%3AAudiobooks%2F%D0%9A%D0%BD%D0%B8%D0%B3%D0%B0%20%2B%201%2F100%25%20%26%20end%3D2.m4b";
+        for suffix in [
+            format!("document/{id}"),
+            format!("tree/{id}"),
+            format!("tree/primary%3AAudiobooks/document/{id}"),
+        ] {
+            assert_eq!(
+                display_path(&format!("{provider}/{suffix}")),
+                "Audiobooks/Книга + 1/100% & end=2.m4b"
+            );
+        }
+        assert_eq!(
+            display_path(&format!("{provider}/tree/ABCD-1234%3ABooks%2Fpart+1.mp3")),
+            "ABCD-1234:/Books/part+1.mp3"
+        );
+        assert_eq!(display_path(&format!("{provider}/tree/primary%3A")), "/");
+        let file = std::env::current_dir()
+            .unwrap()
+            .join("Audiobooks/Book + 1/part.mp3");
+        assert_eq!(
+            display_path(&crate::library::file_uri(&file).unwrap()),
+            file.display().to_string()
+        );
+        for uri in [
+            "content://other.provider/tree/primary%3ABooks/document/opaque%3Aid",
+            "content://10@com.android.externalstorage.documents/tree/primary%3ABooks",
+            "content://com.android.externalstorage.documents/document/opaque",
+            "content://com.android.externalstorage.documents/other/primary%3ABooks",
+            "/Audiobooks/Book + 1",
+        ] {
+            assert_eq!(display_path(uri), uri);
+        }
+    }
+
     #[test]
     fn document_ids_ignore_grant_tree_and_preserve_opaque_characters() {
         let single = "content://provider/document/disk%3Abook%2F%D0%B0%2B1";

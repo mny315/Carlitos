@@ -720,7 +720,7 @@ dependencies = [
 
 [[package]]
 name = "carlitos"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "ashpd",

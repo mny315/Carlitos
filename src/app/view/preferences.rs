@@ -102,7 +102,7 @@ impl View {
         let t = w.global::<Theme>();
         self.settings.theme = ["dark", "light", "system"]
             .get(s.get_theme_index() as usize)
-            .unwrap_or(&"dark")
+            .unwrap_or(&"system")
             .to_string();
         self.settings.language = ["system", "ru", "en"]
             .get(s.get_language_index() as usize)
