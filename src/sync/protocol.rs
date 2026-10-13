@@ -69,6 +69,9 @@ pub(super) struct Channel {
     peer_offer: Vec<u8>,
 }
 pub(super) fn configure(stream: &TcpStream) -> Result<()> {
+    // Windows inherits the listener's nonblocking mode on accepted sockets.
+    // Each connection has its own worker and uses blocking I/O with deadlines.
+    stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     stream.set_nodelay(true)?;
@@ -234,6 +237,31 @@ fn write_frame(stream: &mut TcpStream, bytes: &[u8]) -> Result<()> {
 mod tests {
     use super::*;
     use std::{net::TcpListener, thread};
+
+    #[test]
+    fn accepted_nonblocking_stream_waits_for_handshake_data() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let mut client = TcpStream::connect(listener.local_addr()?)?;
+        let (mut server, _) = listener.accept()?;
+        // Reproduce Windows listener inheritance on every platform.
+        server.set_nonblocking(true)?;
+        let writer = thread::spawn(move || -> Result<()> {
+            thread::sleep(Duration::from_millis(100));
+            let hello = Hello {
+                version: 1,
+                from: "aa".repeat(16),
+                to: "bb".repeat(16),
+                invitation: String::new(),
+            };
+            write_frame(&mut client, &serde_json::to_vec(&hello)?)
+        });
+        let received = read_hello(&mut server);
+        writer.join().unwrap()?;
+        let (hello, _) = received?;
+        assert_eq!(hello.from, "aa".repeat(16));
+        assert_eq!(hello.to, "bb".repeat(16));
+        Ok(())
+    }
 
     // The previous release sent no Noise payload and discarded the received one.
     fn legacy(
