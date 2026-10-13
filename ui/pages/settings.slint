@@ -147,7 +147,11 @@ component SettingsContent inherits VerticalLayout {
                 if State.sync-invitation != "": VerticalLayout {
                     spacing: 6px;
                     Label { text: Theme.t("Введите этот код на другом устройстве", "Enter this code on the other device"); wrap: word-wrap; color: Theme.muted; font-size: 12px * Theme.font-scale; }
-                    Field { text: State.sync-code; text-size: 12px * Theme.font-scale; read-only: true; clip: true; label: Theme.t("Код подключения для копирования", "Pairing code to copy"); }
+                    HorizontalLayout {
+                        spacing: 8px; alignment: start;
+                        own-code := Field { text: State.sync-code; text-size: 22px * Theme.font-scale; width: 116px * Theme.font-scale; read-only: true; label: Theme.t("Код подключения для копирования", "Pairing code to copy"); }
+                        Action { icon: @image-url("../icons/copy.svg"); accessible-label: Theme.t("Копировать код", "Copy code"); enabled: State.sync-code != ""; clicked => { own-code.copy(); } }
+                    }
                 }
                 if State.sync-invitation == "": Action { fill: State.android; text: Theme.t("Показать мой код", "Show my code"); clicked => { State.action("sync-invite", ""); } }
                 HorizontalLayout {
@@ -155,6 +159,7 @@ component SettingsContent inherits VerticalLayout {
                     pairing-input := Field {
                         horizontal-stretch: 1; min-width: 0px; clip: true;
                         text <=> State.sync-input;
+                        input-type: number;
                         placeholder: Theme.t("Код устройства", "Device code");
                         accepted(_) => { if (State.sync-input != "") { State.action("sync-pair", ""); } }
                     }

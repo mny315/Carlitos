@@ -117,8 +117,10 @@ export component Field inherits Rectangle {
     in property <string> placeholder;
     in property <string> label: placeholder;
     in property <length> text-size: Theme.body;
+    in property <InputType> input-type: InputType.text;
     callback edited(string);
     callback accepted(string);
+    public function copy() { input.select-all(); input.copy(); input.clear-selection(); }
     forward-focus: input;
     height: max(Theme.touch ? 48px : 42px, Theme.body + 22px);
     border-radius: 9px;
@@ -130,6 +132,7 @@ export component Field inherits Rectangle {
         x: 13px; y: 8px; width: parent.width - 26px; height: parent.height - 16px;
         text <=> root.text;
         read-only: root.read-only;
+        input-type: root.input-type;
         font-size: root.text-size;
         color: Theme.text;
         selection-background-color: Theme.accent;

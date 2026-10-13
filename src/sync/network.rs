@@ -1,4 +1,6 @@
-use super::invitation::{Invitation, PairingCode, valid_address};
+mod pin;
+
+use super::invitation::{Invitation, valid_address};
 use super::protocol::{self, Channel, Exchange, Hello};
 use super::{PeerStatus, RateRecord, Record, Status, valid_hex};
 use crate::app::Command;
@@ -112,27 +114,12 @@ fn merge_addresses(saved: &[SocketAddr], discovered: &[SocketAddr]) -> Vec<Socke
     addresses
 }
 
+#[derive(Clone)]
 struct Advertisement {
     addresses: Vec<SocketAddr>,
     request: Option<(String, String)>,
     sync_request: String,
     offer: String,
-}
-
-fn resolve_invitation(
-    text: &str,
-    discovered: &BTreeMap<String, Advertisement>,
-) -> Result<Invitation> {
-    if text.trim().to_ascii_lowercase().starts_with("carlitos://") {
-        return Invitation::parse(text);
-    }
-    let code = PairingCode::parse(text)?;
-    let ticket = code.ticket();
-    let (device, advertisement) = discovered.iter().find(|(_, ad)| ad.offer == ticket)
-        .with_context(|| crate::app::text(
-            "Устройство не найдено. Проверьте код, подключите оба устройства к одному Wi-Fi и оставьте код открытым на другом устройстве. Если поиск в сети заблокирован, используйте QR.",
-            "Device not found. Check the code, connect both devices to the same Wi-Fi, and keep the code open on the other device. If network discovery is blocked, use the QR code."))?;
-    Ok(code.invitation(device.clone(), advertisement.addresses.clone()))
 }
 
 fn service_info(
@@ -153,8 +140,8 @@ fn service_info(
         properties.push(("pair-to", &request.device));
         properties.push(("pair-ticket", &request.ticket));
     }
-    if let Some(offer) = offer {
-        properties.push(("pair-code", &offer.ticket));
+    if let Some(offer) = offer.filter(|i| !i.pin.is_empty()) {
+        properties.push(("pair-pin", &offer.ticket));
     }
     Ok(ServiceInfo::new(
         SERVICE,
@@ -171,6 +158,7 @@ struct Shared {
     config: Config,
     path: PathBuf,
     invitation: Option<(Invitation, Instant)>,
+    pin_attempts: u8,
     pairing: Option<(Invitation, Instant)>,
     records: Vec<Record>,
     rates: Vec<RateRecord>,
@@ -284,6 +272,7 @@ impl Network {
             config,
             path,
             invitation: None,
+            pin_attempts: 0,
             pairing: None,
             records: vec![],
             rates: vec![],
@@ -329,7 +318,7 @@ impl Network {
                                 && attempts.get(id).is_none_or(|t| t.elapsed() >= Duration::from_millis(500)) {
                                 pending.insert(id.into());
                             }
-                            let offer = info.get_property_val_str("pair-code").filter(|v| valid_hex(v, 16)).unwrap_or("").to_owned();
+                            let offer = info.get_property_val_str("pair-pin").filter(|v| valid_hex(v, 16)).unwrap_or("").to_owned();
                             discovered.insert(id.into(), Advertisement { addresses, request, sync_request, offer });
                             // Bound untrusted discovery announcements.
                             if discovered.len() > 128 { discovered.clear(); }
@@ -344,6 +333,7 @@ impl Network {
                                 ensure!(state.config.peers.len() < MAX_PEERS, "Too many paired devices");
                                 let invitation = Invitation::new(state.config.id.clone(), local_addresses(state.config.port))?;
                                 state.invitation = Some((invitation, Instant::now() + Duration::from_secs(300)));
+                                state.pin_attempts = 0;
                                 state.message.clear();
                                 state.error = false;
                             }
@@ -373,7 +363,25 @@ impl Network {
                                 ensure!(crate::android::bridge::has_local_network()?, "{}", crate::app::text(
                                     "Подключите телефон к тому же Wi-Fi, что и другое устройство, и повторите подключение. Через мобильный интернет локальная синхронизация недоступна.",
                                     "Connect your phone to the same Wi-Fi as the other device and try again. Local sync is unavailable over mobile data."));
-                                let invitation = resolve_invitation(&text, &discovered)?;
+                                if !text.trim().to_ascii_lowercase().starts_with("carlitos://") {
+                                    let code = pin::parse(&text)?;
+                                    let candidates = pin::candidates(&worker, &discovered)?;
+                                    let shared = worker.clone();
+                                    let sender = tx.clone();
+                                    let generation = shared.lock().unwrap().generation;
+                                    let job = thread::Builder::new().name("carlitos-pin".into()).spawn(move || {
+                                        if let Err(error) = pin::pair(&shared, &sender, &code, candidates, generation) {
+                                            let mut state = shared.lock().unwrap();
+                                            if !state.stopped && state.generation == generation {
+                                                state.message = format!("{error:#}");
+                                                state.error = true;
+                                            }
+                                        }
+                                    })?;
+                                    jobs.push((String::new(), job));
+                                    return Ok(());
+                                }
+                                let invitation = Invitation::parse(&text)?;
                                 let mut state = worker.lock().unwrap();
                                 ensure!(invitation.device != state.config.id, "Cannot pair this device with itself");
                                 ensure!(state.config.peers.len() < MAX_PEERS, "Too many paired devices");
@@ -412,7 +420,7 @@ impl Network {
                     if state.invitation.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.invitation = None; }
                     if state.pairing.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.pairing = None; }
                     let request = state.pairing.as_ref().map(|(i, _)| (i.device.clone(), i.ticket.clone()));
-                    let offer = state.invitation.as_ref().map(|(i, _)| i.ticket.clone());
+                    let offer = state.invitation.as_ref().filter(|(i, _)| !i.pin.is_empty()).map(|(i, _)| i.ticket.clone());
                     if (request != advertised_request || offer != advertised_offer || state.sync_request != advertised_sync) && let Some((daemon, _)) = &mdns {
                         if let Ok(info) = service_info(&state.config, state.pairing.as_ref().map(|(i, _)| i), state.invitation.as_ref().map(|(i, _)| i), state.sync_request) {
                             let _ = daemon.register(info);
@@ -686,6 +694,9 @@ fn accept(
     tx: &mpsc::Sender<Command>,
 ) -> Result<()> {
     let (hello, bytes) = protocol::read_hello(&mut stream)?;
+    if hello.version == 2 {
+        return pin::accept(stream, &hello, &bytes, shared);
+    }
     let (secret, generation, snapshot) = {
         let state = shared.lock().unwrap();
         ensure!(
@@ -775,32 +786,113 @@ mod tests {
         let (a_tx, a_rx) = mpsc::channel();
         let (b_tx, b_rx) = mpsc::channel();
         let a = Network::start_inner(temp.path().join("a.json"), random_hex(16)?, a_tx, false)?;
-        let b = Network::start_inner(temp.path().join("b.json"), random_hex(16)?, b_tx, false)?;
+        let b = Network::start_inner(
+            temp.path().join("b.json"),
+            random_hex(16)?,
+            b_tx.clone(),
+            false,
+        )?;
         let qr = Invitation::parse(&invitation(&a, &a_rx))?;
-        let info = service_info(&a.shared.lock().unwrap().config, None, Some(&qr), 0)?;
+        let mut state = a.shared.lock().unwrap();
+        state.invitation.as_mut().unwrap().0.pin = "0042".into();
+        let offered = &state.invitation.as_ref().unwrap().0;
+        let code = offered.code();
+        let info = service_info(&state.config, None, Some(offered), 0)?;
         let properties = format!("{:?}", info.get_properties());
         assert!(!properties.contains(&qr.key));
-        assert!(!properties.contains(&qr.code()));
+        assert_eq!(
+            info.get_property_val_str("pair-pin"),
+            Some(qr.ticket.as_str())
+        );
+        assert!(info.get_property_val_str("pin").is_none());
+        drop(state);
         let discovered = BTreeMap::from([(
             qr.device.clone(),
             Advertisement {
                 addresses: qr.addresses.clone(),
                 request: None,
                 sync_request: String::new(),
-                offer: info.get_property_val_str("pair-code").unwrap().into(),
+                offer: info.get_property_val_str("pair-pin").unwrap().into(),
             },
         )]);
-        assert!(resolve_invitation(&qr.code(), &BTreeMap::new()).is_err());
-        let other = Invitation::new(random_hex(16)?, vec![])?;
-        assert!(resolve_invitation(&other.code(), &discovered).is_err());
-        let resolved = resolve_invitation(&qr.code().to_lowercase(), &discovered)?;
-        assert_eq!(resolved.key, qr.key);
-        b.request(Request::Pair(resolved.encode()?));
+        assert!(pin::candidates(&b.shared, &BTreeMap::new()).is_err());
+        let candidates = pin::candidates(&b.shared, &discovered)?;
+        assert!(pin::pair(&b.shared, &b_tx, "9999", candidates.clone(), 0).is_err());
+        assert_eq!(a.shared.lock().unwrap().pin_attempts, 1);
+        assert!(a.shared.lock().unwrap().config.peers.is_empty());
+        pin::pair(&b.shared, &b_tx, &code, candidates.clone(), 0)?;
         wait(
             &b_rx,
             |c| matches!(c, Command::SyncStatus(s) if s.peers.len() == 1),
         );
         assert!(a.shared.lock().unwrap().invitation.is_none());
+        assert!(pin::pair(&b.shared, &b_tx, &code, candidates, 0).is_err());
+        Ok(())
+    }
+    #[test]
+    fn pin_limit_expiry_and_cancellation_cannot_add_a_device() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (a_tx, a_rx) = mpsc::channel();
+        let (b_tx, _) = mpsc::channel();
+        let a = Network::start_inner(temp.path().join("a.json"), random_hex(16)?, a_tx, false)?;
+        let b = Network::start_inner(
+            temp.path().join("b.json"),
+            random_hex(16)?,
+            b_tx.clone(),
+            false,
+        )?;
+        let invitation = {
+            let mut state = a.shared.lock().unwrap();
+            let mut invitation = Invitation::new(
+                state.config.id.clone(),
+                vec![SocketAddr::from((Ipv4Addr::LOCALHOST, state.config.port))],
+            )?;
+            invitation.pin = "0042".into();
+            state.invitation = Some((
+                invitation.clone(),
+                Instant::now() + Duration::from_secs(300),
+            ));
+            invitation
+        };
+        let candidates = vec![(
+            invitation.device.clone(),
+            Advertisement {
+                addresses: invitation.addresses.clone(),
+                request: None,
+                sync_request: String::new(),
+                offer: invitation.ticket.clone(),
+            },
+        )];
+        for attempt in 1..=5 {
+            assert!(pin::pair(&b.shared, &b_tx, "9999", candidates.clone(), 0).is_err());
+            let state = a.shared.lock().unwrap();
+            assert_eq!(state.pin_attempts, attempt);
+            if attempt < 5 {
+                assert!(state.invitation.is_some());
+            }
+            assert!(state.config.peers.is_empty());
+        }
+        let until = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Command::SyncStatus(status) =
+                a_rx.recv_timeout(until.saturating_duration_since(Instant::now()))?
+                && status.error
+                && status.invitation.is_empty()
+            {
+                break;
+            }
+        }
+        assert!(pin::pair(&b.shared, &b_tx, "0042", candidates.clone(), 0).is_err());
+        {
+            let mut state = a.shared.lock().unwrap();
+            state.pin_attempts = 0;
+            state.invitation = Some((invitation, Instant::now() - Duration::from_secs(1)));
+        }
+        assert!(pin::pair(&b.shared, &b_tx, "0042", candidates.clone(), 0).is_err());
+        a.shared.lock().unwrap().invitation = None;
+        assert!(pin::pair(&b.shared, &b_tx, "0042", candidates, 0).is_err());
+        assert!(a.shared.lock().unwrap().config.peers.is_empty());
+        assert!(b.shared.lock().unwrap().config.peers.is_empty());
         Ok(())
     }
     #[track_caller]

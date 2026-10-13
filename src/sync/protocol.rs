@@ -21,7 +21,7 @@ pub(super) struct Hello {
 impl Hello {
     pub fn validate(&self) -> Result<()> {
         ensure!(
-            self.version == 1 && valid_hex(&self.from, 16) && valid_hex(&self.to, 16),
+            matches!(self.version, 1 | 2) && valid_hex(&self.from, 16) && valid_hex(&self.to, 16),
             "Invalid sync handshake"
         );
         ensure!(self.from != self.to, "Cannot pair a device with itself");
@@ -85,6 +85,38 @@ pub(super) fn read_hello(stream: &mut TcpStream) -> Result<(Hello, Vec<u8>)> {
     Ok((hello, bytes))
 }
 impl Channel {
+    pub fn pin_client(
+        mut stream: TcpStream,
+        pin: &str,
+        hello: &Hello,
+        exchange: &Exchange,
+    ) -> Result<Self> {
+        hello.validate()?;
+        ensure!(hello.version == 2, "Invalid PIN handshake version");
+        configure(&stream)?;
+        let bytes = serde_json::to_vec(hello)?;
+        write_frame(&mut stream, &bytes)?;
+        let secret = pin_key(&mut stream, pin, &bytes, true)?;
+        Self::handshake(stream, &secret, &bytes, true, exchange)
+    }
+    pub fn pin_server(
+        mut stream: TcpStream,
+        pin: &str,
+        hello: &[u8],
+        exchange: &Exchange,
+    ) -> Result<Self> {
+        let secret = pin_key(&mut stream, pin, hello, false)?;
+        Self::handshake(stream, &secret, hello, false, exchange)
+    }
+    pub fn send_invitation(&mut self, invitation: &str) -> Result<()> {
+        ensure!(invitation.len() <= 4096, "Pairing invitation is too long");
+        self.encrypted_write(invitation.as_bytes())
+    }
+    pub fn receive_invitation(&mut self) -> Result<String> {
+        let bytes = self.encrypted_read()?;
+        ensure!(bytes.len() <= 4096, "Pairing invitation is too long");
+        Ok(String::from_utf8(bytes)?)
+    }
     pub fn client(
         mut stream: TcpStream,
         key: &[u8; 32],
@@ -195,6 +227,30 @@ impl Channel {
         exchange.validate()?;
         Ok(exchange)
     }
+}
+fn pin_key(stream: &mut TcpStream, pin: &str, hello: &[u8], client: bool) -> Result<[u8; 32]> {
+    use spake2::{Ed25519Group, Identity, Password, Spake2};
+    ensure!(
+        pin.len() == 4 && pin.bytes().all(|c| c.is_ascii_digit()),
+        "Invalid PIN"
+    );
+    let password = Password::new(pin.as_bytes());
+    let client_id = Identity::new(b"Carlitos PIN client v1");
+    // Bind the PAKE to both device identities, protocol version and invitation.
+    let server_id = Identity::new(hello);
+    let (state, outgoing) = if client {
+        Spake2::<Ed25519Group>::start_a(&password, &client_id, &server_id)
+    } else {
+        Spake2::<Ed25519Group>::start_b(&password, &client_id, &server_id)
+    };
+    write_frame(stream, &outgoing)?;
+    let incoming = read_frame(stream, 128)?;
+    let secret = state
+        .finish(&incoming)
+        .map_err(|e| anyhow::anyhow!("Invalid PIN exchange: {e:?}"))?;
+    secret
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid PIN session key"))
 }
 fn read_frame(stream: &mut TcpStream, limit: usize) -> Result<Vec<u8>> {
     let deadline = Instant::now() + Duration::from_secs(2);

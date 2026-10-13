@@ -112,7 +112,7 @@ internal fun UiSuite.syncAppearanceChecks() {
         capture("sync-manual-dark")
         tap("Device code", "TextInput")
         eventually("Pairing input keyboard") { call().getBoolean("keyboard") }
-        instrumentation.sendStringSync("invalid-" + "a".repeat(320))
+        instrumentation.sendStringSync("12345")
         capture("sync-manual-keyboard")
         back()
         scrollSyncTo("Pair")

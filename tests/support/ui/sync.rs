@@ -17,7 +17,7 @@ pub fn sync_preview(window: &AppWindow, scene: String) {
         if scene == "qr" {
             // Inert compact invitation with two endpoints; no live key.
             let invitation = "CARLITOS://PAIR/2/VKVKVKVKVKVKVKVKVKVKVKVKVLGMZTGMZTGMZTGMZTGMZTGMZTGMBKABBKZTJLATAAA3GNA";
-            s.set_sync_code("ZTGMZ-TGMZT-GMZTG-MZTGM-ZTGMZQ".into());
+            s.set_sync_code("0042".into());
             s.set_sync_qr(carlitos::sync::qr_image(invitation).unwrap());
             s.set_sync_invitation(invitation.into());
         }
