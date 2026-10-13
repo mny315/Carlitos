@@ -1,6 +1,41 @@
 use super::*;
 
 #[test]
+fn speed_migration_keeps_sync_identity_and_progress_revisions() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let path = temp.path().join("db");
+    let mut store = Store::open(&path)?;
+    let mut library = store.import(vec![draft("saved", 1)])?;
+    library.session.current = Some(Target::Book(library.parts[0].id));
+    library.update_progress(12_345, false);
+    store.save(&library.session, &library.progress)?;
+    let device = store.sync_device()?;
+    let revision: (i64, String) =
+        store
+            .conn
+            .query_row("SELECT updated,device FROM sync_changes", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?;
+    store
+        .conn
+        .execute_batch("DROP TABLE book_rates; PRAGMA user_version=6;")?;
+    drop(store);
+    let mut migrated = Store::open(&path)?;
+    assert_eq!(migrated.sync_device()?, device);
+    assert_eq!(migrated.load()?.progress[0].position, 12_345);
+    let after: (i64, String) =
+        migrated
+            .conn
+            .query_row("SELECT updated,device FROM sync_changes", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?;
+    assert_eq!(after, revision);
+    migrated.save_book_rate(library.books[0].id, 1.75)?;
+    assert_eq!(migrated.book_rate(library.books[0].id)?, Some(1.75));
+    Ok(())
+}
+
+#[test]
 fn concurrent_opens_initialize_and_migrate_legacy_schemas_once() -> Result<()> {
     for version in 0..=3 {
         let temp = tempfile::tempdir()?;
@@ -35,7 +70,7 @@ fn concurrent_opens_initialize_and_migrate_legacy_schemas_once() -> Result<()> {
                             store
                                 .conn
                                 .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?,
-                            5
+                            7
                         );
                         Ok(())
                     })
@@ -137,7 +172,7 @@ fn migration_removes_music_session_but_preserves_shared_books() -> Result<()> {
             store
                 .conn
                 .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
-            5
+            7
         );
         assert!(store.conn.prepare("SELECT * FROM queue_entries").is_err());
         assert!(store.conn.prepare("SELECT music FROM media_files").is_err());
@@ -176,7 +211,10 @@ fn migration_from_v3_preserves_books_and_indexes_reimport_lookups() -> Result<()
     )?;
     store.conn.execute_batch(
         "DROP INDEX book_parts_file; DROP INDEX chapters_part;
-         DROP INDEX source_files_file; PRAGMA user_version=3;",
+         DROP INDEX source_files_file;
+         DROP TRIGGER sync_progress_insert; DROP TRIGGER sync_progress_update;
+         DROP TABLE book_rates; DROP TABLE sync_changes; DROP TABLE sync_fingerprints; DROP TABLE sync_identity;
+         UPDATE book_progress SET updated=updated/1000; PRAGMA user_version=3;",
     )?;
     drop(store);
 

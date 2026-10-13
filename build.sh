@@ -34,7 +34,7 @@ Usage: ./build.sh <command> [options]
   check [linux|android|all] Formatting and Clippy (Linux by default)
   test [unit|tooling|media|sonic|ui|desktop|visual|performance|portable|windows]
                           Unit + integration tests by default; options forwarded
-  test android [session|sources|import|playback|ui]
+  test android [session|sources|import|playback|ui|sync]
                           Device tests; playback/UI use an isolated test app
   format | fetch | versions
   package | install       Build/install the native Nix package

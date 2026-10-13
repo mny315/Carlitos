@@ -21,6 +21,59 @@ impl Controller {
                 None
             }
             "state" => None,
+            "sync_prepare" => {
+                let path = std::path::PathBuf::from(
+                    request["path"].as_str().context("Missing sync fixture")?,
+                );
+                let library = self.store()?.import(vec![Draft {
+                    root_uri: file_uri(path.parent().context("Missing fixture directory")?)?,
+                    title: "Sync fixture".into(),
+                    author: "Device suite".into(),
+                    include: true,
+                    files: vec![Media {
+                        uri: file_uri(&path)?,
+                        identity: "sync-fixture".into(),
+                        relative: "book.wav".into(),
+                        size: Some(std::fs::metadata(&path)?.len()),
+                        modified: Some(1),
+                        duration: Some(120_000),
+                        title: "Sync fixture".into(),
+                        ..Default::default()
+                    }],
+                }])?;
+                self.reconcile(library);
+                let mut settings = self.options.settings.clone();
+                settings.local_sync = true;
+                Some(Command::Settings(settings))
+            }
+            "sync_progress" => {
+                let part = self.library.parts.first().context("Missing sync book")?.id;
+                if self.playback.phase == crate::player::Phase::Ready {
+                    self.seek_to(number("position"));
+                } else {
+                    self.library.session.current = Some(Target::Book(part));
+                    self.library.update_progress(number("position"), false);
+                    self.save()?;
+                }
+                None
+            }
+            "sync_reset" => Some(Command::ResetProgress(
+                self.library.books.first().context("Missing sync book")?.id,
+            )),
+            "sync_open" => {
+                let part = self.library.parts.first().context("Missing sync book")?.id;
+                let position = self
+                    .library
+                    .progress
+                    .iter()
+                    .find(|p| p.part_id == part)
+                    .map_or(0, |p| p.position);
+                self.load(part, position, false)?;
+                None
+            }
+            "rate" => Some(Command::Rate(
+                request["value"].as_f64().context("Missing rate")?,
+            )),
             "busy_document_import" => {
                 let file = self
                     .library
@@ -85,11 +138,15 @@ impl Controller {
             self.handle(command)?;
         }
         let saved = self.store()?.load()?;
+        let library = self.library.clone();
+        let rates = self.store()?.sync_rates(&library)?;
         Ok(
             json!({"books": self.library.books, "parts": self.library.parts,
             "media": self.library.media, "session": self.library.session,
             "progress": self.library.progress, "saved": saved.session,
             "saved_progress": saved.progress, "settings": self.options.settings,
+            "book_rates": rates,
+            "sync": self.sync.as_ref().map(|s| s.test_status()),
             "playback": {"position": self.playback.position, "playing": self.playback.playing,
                 "phase": format!("{:?}", self.playback.phase), "token": self.token,
                 "rate": self.playback.rate, "silence": self.playback.skip_silence,

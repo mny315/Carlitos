@@ -11,6 +11,7 @@ pub(crate) fn validate_arguments(args: &[String]) -> anyhow::Result<()> {
                         | "--mock-portal"
                         | "--test-theme"
                         | "--test-cover-theme"
+                        | "--test-animation-fps"
                 );
         if flag {
             i += 1;
@@ -30,7 +31,11 @@ pub(crate) fn validate_arguments(args: &[String]) -> anyhow::Result<()> {
             ) || cfg!(all(debug_assertions, target_os = "linux"))
                 && matches!(
                     key,
-                    "--exercise" | "--test-close-after" | "--test-portal" | "--test-library-tab"
+                    "--exercise"
+                        | "--test-close-after"
+                        | "--test-portal"
+                        | "--test-library-tab"
+                        | "--test-sync-ui"
                 ),
             "Unknown option: {key}. Use --help."
         );
@@ -89,6 +94,15 @@ pub(crate) fn validate_arguments(args: &[String]) -> anyhow::Result<()> {
         anyhow::ensure!(
             args.iter().any(|a| a == "--data-dir"),
             "Test scenarios require an isolated --data-dir"
+        );
+    }
+    if args
+        .iter()
+        .any(|a| a == "--test-sync-ui" || a == "--test-animation-fps")
+    {
+        anyhow::ensure!(
+            args.iter().any(|a| a == "--demo"),
+            "Visual scenarios require --demo"
         );
     }
     Ok(())

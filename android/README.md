@@ -28,9 +28,9 @@
 
 Релизы в `target/releases/`, каждый со своим файлом SHA-256:
 
-- `Carlitos-1.0.2-android-armeabi-v7a-release.apk` — ARM 32 бита (v7).
-- `Carlitos-1.0.2-android-arm64-v8a-release.apk` — ARM 64 бита (v8).
-- `Carlitos-1.0.2-android-universal-release.apk` — обе архитектуры в одном APK.
+- `Carlitos-1.0.3-android-armeabi-v7a-release.apk` — ARM 32 бита (v7).
+- `Carlitos-1.0.3-android-arm64-v8a-release.apk` — ARM 64 бита (v8).
+- `Carlitos-1.0.3-android-universal-release.apk` — обе архитектуры в одном APK.
 
 Если архитектура телефона неизвестна, используйте универсальный APK:
 Android выберет подходящую библиотеку. Отладочная сборка создаёт те же три

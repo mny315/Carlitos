@@ -26,6 +26,7 @@ fn legacy(path: &Path) -> Result<Store> {
     let mut library = store.import(vec![book])?;
     library.session.current = Some(Target::Book(library.parts[0].id));
     library.update_progress(12_345, false);
+    library.progress[0].updated /= 1000; // Schema 4 stored Unix seconds.
     library.session.volume = 0.37;
     library.session.muted = true;
     store.save(&library.session, &library.progress)?;
@@ -39,7 +40,13 @@ fn legacy(path: &Path) -> Result<Store> {
     Ok(store)
 }
 
-fn snapshot(library: Library) -> serde_json::Value {
+fn snapshot(mut library: Library) -> serde_json::Value {
+    // Compare the same instant before and after the seconds-to-millis migration.
+    for progress in &mut library.progress {
+        if progress.updated < 100_000_000_000 {
+            progress.updated *= 1000;
+        }
+    }
     serde_json::json!({
         "sources": library.sources, "links": library.source_files, "media": library.media,
         "books": library.books, "parts": library.parts, "progress": library.progress,
@@ -67,7 +74,7 @@ fn v4_path_migration_preserves_all_library_data_indexes_and_triggers() -> Result
         migrated
             .conn
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?,
-        5
+        7
     );
     assert_eq!(
         migrated

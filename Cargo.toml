@@ -1,6 +1,6 @@
 [package]
 name = "carlitos"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 autotests = false
 rust-version = "1.92"
@@ -30,6 +30,15 @@ slint = { version = "=1.18.1", default-features = false, features = ["std", "com
 futures-lite = "2.6"
 tempfile = "3"
 dunce = "1.0"
+sha2 = "0.10"
+getrandom = "0.3"
+hex = "0.4"
+data-encoding = "2.11"
+qrcode = { version = "0.14", default-features = false }
+mdns-sd = "0.21"
+if-addrs = "0.15"
+snow = { version = "0.10", default-features = false, features = ["std", "default-resolver", "use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-blake2"] }
+socket2 = "0.6"
 
 [target.'cfg(any(target_os = "linux", windows))'.dependencies]
 slint = { version = "=1.18.1", default-features = false, features = ["backend-winit", "renderer-femtovg", "renderer-software", "accessibility", "raw-window-handle-06", "unstable-winit-030"] }
@@ -75,6 +84,11 @@ resvg = { version = "0.48", default-features = false }
 
 [profile.dev]
 debug = 0
+
+# `run` is used as a desktop build too. Optimize the generated Slint UI so
+# full-window transitions can keep up with high-refresh monitors.
+[profile.dev.package.carlitos]
+opt-level = 3
 
 # The Android debug APK is also used on devices. Unoptimized Slint layout and
 # rendering cannot keep up with high-refresh displays; retain development checks.

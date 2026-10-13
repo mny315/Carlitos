@@ -64,6 +64,7 @@ impl Handle {
                     audio,
                     playback: Playback::default(),
                     requested_rate: options.settings.playback_rate,
+                    pending_rate: None,
                     requested_skip_silence: options.settings.skip_silence,
                     tx: sender,
                     events: events_tx,
@@ -81,7 +82,15 @@ impl Handle {
                     maintenance: false,
                     maintenance_control: ScanControl::default(),
                     tag_control: ScanControl::default(),
+                    sync: None,
+                    sync_hashing: false,
+                    sync_hash_control: ScanControl::default(),
+                    sync_hash_attempted: Default::default(),
+                    restore_progress: None,
                 };
+                if let Err(error) = app.configure_sync() {
+                    app.notice(format!("{error:#}"));
+                }
                 app.emit_library();
                 if !app.options.demo {
                     app.refresh_missing_tags();
@@ -90,7 +99,7 @@ impl Handle {
                     // Distinct command tokens keep the first acknowledgement
                     // from publishing/saving half-applied startup preferences.
                     if let Err(error) = app
-                        .set_rate(app.options.settings.playback_rate)
+                        .apply_rate(app.options.settings.playback_rate)
                         .and_then(|()| app.set_skip_silence(app.options.settings.skip_silence))
                     {
                         app.notice(format!("{error:#}"));
@@ -129,6 +138,8 @@ impl Handle {
                 app.scan_control.cancel();
                 app.maintenance_control.cancel();
                 app.tag_control.cancel();
+                app.sync_hash_control.cancel();
+                app.sync.take();
                 for scan in app.scans {
                     let _ = scan.join();
                 }
@@ -160,6 +171,11 @@ impl Controller {
             self.options.settings.save(&self.options.settings_path)?;
         }
         self.audio.stop();
+        self.sync_hash_control.cancel();
+        if let Some(sync) = &self.sync {
+            sync.flush();
+        }
+        self.sync.take();
         for scan in self.scans.drain(..) {
             let _ = scan.join();
         }

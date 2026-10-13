@@ -94,6 +94,11 @@ fn run() -> anyhow::Result<()> {
     if let Some(language) = option("--language") {
         settings.language = language;
     }
+    #[cfg(all(debug_assertions, target_os = "linux"))]
+    if let Some(scene) = option("--test-sync-ui") {
+        settings.local_sync = scene != "disabled";
+        settings.reduced_motion = true;
+    }
     if let Some(size) = option("--size")
         && let Some((width, height)) = size.split_once('x')
     {
@@ -255,6 +260,18 @@ fn run() -> anyhow::Result<()> {
     #[cfg(all(debug_assertions, target_os = "linux"))]
     if let Some(folder) = option("--exercise") {
         test_support::ui::exercise(&window, folder);
+    }
+    #[cfg(all(debug_assertions, target_os = "linux"))]
+    if let Some(scene) = option("--test-sync-ui") {
+        test_support::ui::sync_preview(&window, scene);
+    }
+    #[cfg(all(debug_assertions, target_os = "linux"))]
+    if args.iter().any(|a| a == "--test-animation-fps") {
+        let tx = app.tx.clone();
+        test_support::animation::start(&window, move |report| {
+            println!("ANIMATION FRAMES {}", report);
+            let _ = tx.send(app::Command::Quit);
+        });
     }
     slint::run_event_loop_until_quit()?;
     app.join();

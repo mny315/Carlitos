@@ -23,6 +23,7 @@ pub struct Settings {
     pub skip_silence: bool,
     pub library_sort: String,
     pub library_tab: String,
+    pub local_sync: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -41,6 +42,7 @@ impl Default for Settings {
             skip_silence: false,
             library_sort: "listening".into(),
             library_tab: "all".into(),
+            local_sync: false,
         }
     }
 }

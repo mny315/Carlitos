@@ -39,6 +39,8 @@ class DeviceInstrumentation : Instrumentation() {
     private var imports = false
     private var playback = false
     private var ui = false
+    private var syncOnly = false
+    private var animationOnly = false
     private var libraryOnly = false
     private var sourceSelectionOnly = false
     private var chaptersOnly = false
@@ -54,6 +56,8 @@ class DeviceInstrumentation : Instrumentation() {
     private var settingsRecovery = false
     private var batteryOnly = false
     override fun onCreate(arguments: Bundle?) {
+        syncOnly = arguments?.getString("sync-only") == "true"
+        animationOnly = arguments?.getString("animation-only") == "true"
         super.onCreate(arguments)
         sources = arguments?.getString("suite") == "sources"
         imports = arguments?.getString("suite") == "import"
@@ -84,6 +88,16 @@ class DeviceInstrumentation : Instrumentation() {
     }
     override fun onStart() {
         try {
+            if (animationOnly) {
+                UiSuite(this).animationFrames()
+                finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android animation frame measurement\n") })
+                return
+            }
+            if (syncOnly) {
+                SyncSuite(this).run()
+                finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android local sync and QR decoding\n") })
+                return
+            }
             if (batteryOnly) {
                 BatteryOptimizationSuite(this).run()
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android battery optimization request\n") })

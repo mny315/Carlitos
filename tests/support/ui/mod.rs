@@ -6,10 +6,12 @@ mod scenarios;
 mod self_test;
 mod sliders;
 mod sources;
+mod sync;
 
 pub use exercise::exercise;
 pub use scenarios::{library_tab, portal, system_theme};
 pub use self_test::start;
+pub use sync::sync_preview;
 
 use crate::{AppWindow, State};
 use slint::{

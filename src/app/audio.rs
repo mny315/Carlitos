@@ -13,7 +13,6 @@ pub enum AudioCommand {
         playing: bool,
         #[cfg(target_os = "android")]
         title: String,
-        #[cfg(target_os = "android")]
         rate: f64,
         #[cfg(target_os = "android")]
         skip_silence: bool,

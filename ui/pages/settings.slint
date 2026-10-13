@@ -1,7 +1,8 @@
 import { ScrollView, ListView, ComboBox, SpinBox } from "std-widgets.slint";
 import { State } from "../state.slint";
+import { SyncAction } from "../components/sync-action.slint";
 import { Theme } from "../components/theme.slint";
-import { Action, Label, Toggle, BusyStatus, PercentSlider } from "../components/controls.slint";
+import { Action, Label, Toggle, BusyStatus, PercentSlider, Field } from "../components/controls.slint";
 
 component ScaleSetting inherits VerticalLayout {
     in property <string> title;
@@ -14,8 +15,9 @@ component ScaleSetting inherits VerticalLayout {
     spacing: 8px;
     Label { text: root.title; wrap: word-wrap; }
     HorizontalLayout {
-        spacing: 8px;
+        spacing: 8px; alignment: start;
         SpinBox {
+            max-width: 140px;
             minimum: root.minimum; maximum: root.maximum; step-size: 15;
             value <=> root.percent;
             min-height: Theme.action-height;
@@ -42,14 +44,51 @@ component ScaleSetting inherits VerticalLayout {
     Label { text: root.description; color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
 }
 
+component ThemeChoice inherits ComboBox {
+    max-width: 280px;
+    model: State.theme-labels; current-index <=> State.theme-index;
+    selected(_) => { State.settings-changed(); }
+}
+
+component LanguageChoice inherits ComboBox {
+    max-width: 280px;
+    model: State.language-labels; current-index <=> State.language-index;
+    selected(_) => { State.settings-changed(); }
+}
+
+component PairingToggle inherits Action {
+    fill: State.android;
+    text: Theme.t("Подключение по коду", "Pair using a code");
+    selected: State.sync-manual;
+    trailing-icon: State.sync-manual ? @image-url("../icons/up.svg") : @image-url("../icons/down.svg");
+    clicked => { State.sync-manual = !State.sync-manual; }
+}
+
+component QrAction inherits Action {
+    fill: State.android;
+    primary: State.sync-invitation == "" && !State.android;
+    text: State.android ? root.accessible-label : State.sync-invitation == "" ? Theme.t("Показать QR", "Show QR") : Theme.t("Закрыть QR", "Close QR");
+    accessible-label: State.sync-invitation == "" ? Theme.t("Показать QR для подключения", "Show pairing QR code") : Theme.t("Закрыть QR-код", "Close QR code");
+    clicked => { State.action(State.sync-invitation == "" ? "sync-invite" : "sync-cancel", ""); }
+}
+
 component SettingsContent inherits VerticalLayout {
+        private property <bool> grouped: !State.android && root.width >= 640px * Theme.font-scale;
         spacing: 18px; padding-right: 12px;
         Label { text: Theme.t("Настройки", "Settings"); font-size: (28px) * Theme.font-scale; font-weight: 650; }
         Label { text: Theme.t("ОФОРМЛЕНИЕ", "APPEARANCE"); color: Theme.muted; font-size: (11px) * Theme.font-scale; }
         if State.android: Action { fill: true; text: State.theme-labels[State.theme-index]; icon: @image-url("../icons/down.svg"); clicked => { State.overlay = 10; } }
         if State.android: Action { fill: true; text: State.language-labels[State.language-index]; icon: @image-url("../icons/down.svg"); clicked => { State.overlay = 11; } }
-        if !State.android: ComboBox { model: State.theme-labels; current-index <=> State.theme-index; selected(_) => { State.settings-changed(); } }
-        if !State.android: ComboBox { model: State.language-labels; current-index <=> State.language-index; selected(_) => { State.settings-changed(); } }
+        if root.grouped: HorizontalLayout {
+            spacing: 12px; alignment: start;
+            ThemeChoice { }
+            LanguageChoice { }
+        }
+        if !State.android && !root.grouped: VerticalLayout {
+            spacing: 10px;
+            ThemeChoice { }
+            LanguageChoice { }
+        }
         ScaleSetting {
             title: Theme.t("Размер текста", "Text size");
             description: "70–205%";
@@ -73,11 +112,84 @@ component SettingsContent inherits VerticalLayout {
             Action { fill: true; text: Theme.t("Фоновая работа", "Background playback"); clicked => { State.action("battery-settings", ""); } }
             Label { text: Theme.t("Отключите оптимизацию батареи для Carlitos, чтобы снизить риск остановки книги при выключенном экране.", "Turn off battery optimization for Carlitos to reduce interruptions while the screen is off."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
         }
+        Label { text: Theme.t("УСТРОЙСТВА", "DEVICES"); color: Theme.muted; font-size: 11px * Theme.font-scale; }
+        Toggle {
+            text: Theme.t("Синхронизация", "Synchronization");
+            description: Theme.t("Позиция и скорость каждой книги в вашей локальной сети.", "Each book's position and speed on your local network.");
+            checked <=> State.local-sync;
+            toggled => { State.settings-changed(); }
+        }
+        if State.local-sync: VerticalLayout {
+            spacing: 10px;
+            Label { text: State.sync-name; color: Theme.muted; wrap: word-wrap; }
+            if State.sync-indexing: BusyStatus { text: Theme.t("Подготавливаем книги для синхронизации…", "Preparing books for synchronization…"); }
+            Label { text: Theme.t("Подключите устройства к одному роутеру и откройте Carlitos на обоих. На них должны быть одинаковые аудиофайлы книг.", "Connect both devices to the same router and open Carlitos on both. They must have the same audiobook files."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
+            if root.grouped: HorizontalLayout {
+                spacing: 8px; alignment: start;
+                QrAction { }
+                PairingToggle { }
+                if State.sync-peers.length > 0: SyncAction { }
+            }
+            if State.android: Action { fill: true; primary: true; text: Theme.t("Сканировать QR", "Scan QR code"); clicked => { State.action("sync-scan", ""); } }
+            if !root.grouped: QrAction { }
+            if State.sync-invitation != "": VerticalLayout {
+                spacing: 8px;
+                HorizontalLayout { alignment: State.android ? center : start;
+                    Image { source: State.sync-qr; width: min(320px, parent.width); height: self.width; image-fit: contain; image-rendering: pixelated; accessible-label: Theme.t("QR-код подключения Carlitos", "Carlitos pairing QR code"); }
+                }
+                Label { text: Theme.t("Отсканируйте в Carlitos на другом устройстве. Код действует 5 минут и только для одного подключения.", "Scan in Carlitos on the other device. The code expires in 5 minutes and pairs one device."); wrap: word-wrap; color: Theme.muted; font-size: 12px * Theme.font-scale; }
+            }
+            if !root.grouped: PairingToggle { }
+            if State.sync-manual: VerticalLayout {
+                vertical-stretch: 0;
+                max-width: State.android ? 100000px : 520px;
+                spacing: 8px;
+                if State.sync-invitation != "": VerticalLayout {
+                    spacing: 6px;
+                    Label { text: Theme.t("Введите этот код на другом устройстве", "Enter this code on the other device"); wrap: word-wrap; color: Theme.muted; font-size: 12px * Theme.font-scale; }
+                    Field { text: State.sync-code; text-size: 12px * Theme.font-scale; read-only: true; clip: true; label: Theme.t("Код подключения для копирования", "Pairing code to copy"); }
+                }
+                if State.sync-invitation == "": Action { fill: State.android; text: Theme.t("Показать мой код", "Show my code"); clicked => { State.action("sync-invite", ""); } }
+                HorizontalLayout {
+                    spacing: 8px; vertical-stretch: 0;
+                    pairing-input := Field {
+                        horizontal-stretch: 1; min-width: 0px; clip: true;
+                        text <=> State.sync-input;
+                        placeholder: Theme.t("Код устройства", "Device code");
+                        accepted(_) => { if (State.sync-input != "") { State.action("sync-pair", ""); } }
+                    }
+                    Action {
+                        text: Theme.t("Подключить", "Pair");
+                        primary: State.sync-input != "";
+                        clicked => { if (State.sync-input != "") { State.action("sync-pair", ""); } else { pairing-input.focus(); } }
+                    }
+                }
+            }
+            if State.sync-message != "": Label { text: State.sync-message; wrap: word-wrap; color: State.sync-error ? Theme.danger : Theme.muted; }
+            if State.sync-peers.length > 0: Label { text: Theme.t("Связанные устройства", "Paired devices"); color: Theme.muted; font-size: 12px * Theme.font-scale; }
+            for peer in State.sync-peers: HorizontalLayout {
+                spacing: 12px; max-width: State.android ? 100000px : 520px;
+                VerticalLayout { alignment: center; spacing: 4px;
+                    Label { text: peer.name; wrap: word-wrap; }
+                    Label { text: peer.online ? Theme.t("На связи", "Connected") : Theme.t("Не в сети", "Offline"); color: Theme.muted; font-size: 12px * Theme.font-scale; }
+                }
+                Action { destructive: true; text: Theme.t("Отвязать", "Unpair"); accessible-label: Theme.t("Отвязать устройство ", "Unpair device ") + peer.name; clicked => { State.action("sync-forget", peer.key); } }
+            }
+            if State.sync-peers.length > 0 && !root.grouped: SyncAction { fill: State.android; }
+            Label { text: Theme.t("Прогресс обновляется автоматически. Для ручного обмена достаточно нажать кнопку на одном устройстве.", "Progress updates automatically. To sync manually, press the button on either device."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
+        }
         Rectangle { min-height: 16px; vertical-stretch: 1; }
 }
 
 export component SettingsPage inherits Rectangle {
-    if !State.android: ScrollView { SettingsContent { } }
+    if !State.android: desktop-scroll := ScrollView {
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, desktop-content.preferred-height);
+        desktop-content := SettingsContent {
+            x: 0px; y: 0px;
+            width: min(680px, desktop-scroll.visible-width); height: self.preferred-height;
+        }
+    }
     if State.android: Rectangle {
         scroll := Flickable {
             width: parent.width; height: parent.height;
@@ -185,7 +297,7 @@ export component AboutPage inherits ScrollView {
             Image { source: @image-url("../../data/icons/io.github.mny315.Carlitos.svg"); width: 80px; height: 80px; }
             VerticalLayout { alignment: center; spacing: 6px;
                 Label { text: "Carlitos"; font-size: (32px) * Theme.font-scale; font-weight: 650; }
-                Label { text: Theme.t("Версия 1.0.2", "Version 1.0.2"); color: Theme.muted; }
+                Label { text: Theme.t("Версия 1.0.3", "Version 1.0.3"); color: Theme.muted; }
             }
         }
         Label { text: Theme.t("Ваши книги. Ваш ритм.", "Your books. Your pace."); font-size: (21px) * Theme.font-scale; font-weight: 600; horizontal-alignment: center; wrap: word-wrap; }

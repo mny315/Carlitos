@@ -19,6 +19,23 @@ static SENDER: OnceLock<Sender<Command>> = OnceLock::new();
 pub fn set_sender(sender: Sender<Command>) {
     let _ = SENDER.set(sender);
 }
+pub fn device_name() -> Result<String> {
+    let bridge = BRIDGE.get().context("Android bridge not initialized")?;
+    let mut env = bridge.vm.attach_current_thread()?;
+    env.with_local_frame(4, |env| -> Result<String> {
+        let class: &JClass<'_> = bridge.class.as_obj().into();
+        let name = env.call_static_method(class, "deviceName", "()Ljava/lang/String;", &[])?;
+        Ok(String::from(env.get_string(&JString::from(name.l()?))?))
+    })
+}
+pub fn has_local_network() -> Result<bool> {
+    let bridge = BRIDGE.get().context("Android bridge not initialized")?;
+    let mut env = bridge.vm.attach_current_thread()?;
+    let class: &JClass<'_> = bridge.class.as_obj().into();
+    Ok(env
+        .call_static_method(class, "hasLocalNetwork", "()Z", &[])?
+        .z()?)
+}
 fn send(command: Command) {
     if let Some(sender) = SENDER.get() {
         let _ = sender.send(command);
@@ -186,6 +203,12 @@ pub extern "system" fn Java_io_github_mny315_carlitos_Bridge_event(
                 value["owner"].as_str().unwrap_or_default().into(),
             )),
             "play" => send(Command::Playing(flag("value"))),
+            "sync-pair" => send(Command::Sync(crate::sync::Request::Pair(
+                value["code"]
+                    .as_str()
+                    .context("Missing pairing code")?
+                    .into(),
+            ))),
             "seek" => send(Command::SeekAbsolute(number("position"))),
             "delta" => send(Command::SeekDelta(value["value"].as_i64().unwrap_or(0))),
             "next" => send(Command::Next(flag("value"))),

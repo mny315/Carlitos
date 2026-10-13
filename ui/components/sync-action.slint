@@ -1,0 +1,19 @@
+import { State } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action } from "controls.slint";
+
+export component SyncAction inherits Action {
+    in property <bool> icon-only: false;
+    private property <bool> working: State.local-sync && (State.sync-busy || State.sync-indexing);
+    icon: @image-url("../icons/refresh.svg");
+    spinning: working;
+    selected: working;
+    enabled: !State.sync-busy;
+    visual-enabled: true;
+    text: icon-only ? "" : working ? Theme.t("Синхронизация…", "Syncing…") : Theme.t("Синхронизировать", "Sync");
+    accessible-label: working ? Theme.t("Синхронизация…", "Syncing…") : Theme.t("Синхронизировать", "Sync");
+    clicked => {
+        if (!State.local-sync || State.sync-peers.length == 0) { State.navigate(3); }
+        else { State.action("sync-now", ""); }
+    }
+}

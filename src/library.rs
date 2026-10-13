@@ -8,7 +8,7 @@ mod time;
 
 pub use ordering::{natural_cmp, order_parts};
 pub use paths::{cache_dir, data_dir, file_uri, local_path};
-pub use time::{book_seek, format_time, now, parse_time};
+pub use time::{book_seek, format_time, now, now_millis, parse_time};
 
 use serde::{Deserialize, Serialize};
 

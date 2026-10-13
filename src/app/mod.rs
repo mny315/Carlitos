@@ -12,6 +12,7 @@ mod playback;
 #[path = "tests/device.rs"]
 mod playback_device_tests;
 mod scanning;
+mod sync;
 pub use demo::demo_library;
 #[cfg(test)]
 mod tests;
@@ -53,6 +54,7 @@ struct Controller {
     // A load can overtake the snapshot that acknowledges a preference change.
     // Keep requested audio parameters separate from confirmed, saved settings.
     requested_rate: f64,
+    pending_rate: Option<(Id, f64)>,
     requested_skip_silence: bool,
     tx: Sender<Command>,
     events: async_channel::Sender<Event>,
@@ -70,6 +72,11 @@ struct Controller {
     maintenance: bool,
     maintenance_control: ScanControl,
     tag_control: ScanControl,
+    sync: Option<crate::sync::Network>,
+    sync_hashing: bool,
+    sync_hash_control: ScanControl,
+    sync_hash_attempted: std::collections::HashSet<(Id, String)>,
+    restore_progress: Option<Id>,
 }
 impl Controller {
     fn notice(&self, text: String) {
@@ -79,6 +86,9 @@ impl Controller {
         let _ = self
             .events
             .try_send(Event::Library(Box::new(self.library.clone())));
+        if self.sync.is_some() {
+            let _ = self.tx.send(Command::SyncRefresh);
+        }
     }
     fn emit_drafts(&self) {
         let _ = self
@@ -103,6 +113,7 @@ impl Controller {
         let progress = self.library.progress.clone();
         self.store()?.save(&session, &progress)?;
         self.checkpoint = Instant::now();
+        self.publish_sync();
         Ok(())
     }
     fn reconcile(&mut self, mut library: Library) {

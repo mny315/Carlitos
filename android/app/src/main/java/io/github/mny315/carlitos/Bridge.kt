@@ -26,12 +26,30 @@ object Bridge {
     var service: PlaybackService? = null
     private val pending = ArrayDeque<JSONObject>()
     private var audioToken = 0L
+    private var syncMulticast: android.net.wifi.WifiManager.MulticastLock? = null
     private val startupTimeout = Runnable {
         if (service == null && pending.isNotEmpty()) {
             audioFailed(IllegalStateException("Playback service did not start"))
         }
     }
     @JvmStatic fun documents(message: String): String = Documents.request(message)
+    @JvmStatic fun hasLocalNetwork(): Boolean {
+        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        return connectivity.allNetworks.any { network ->
+            val capabilities = connectivity.getNetworkCapabilities(network)
+            capabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true ||
+                capabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) == true
+        }
+    }
+    @JvmStatic fun deviceName(): String {
+        val name = runCatching {
+            android.provider.Settings.Global.getString(context.contentResolver, "device_name")
+        }.getOrNull()?.trim()
+        if (!name.isNullOrBlank()) return name
+        val model = android.os.Build.MODEL.trim()
+        val manufacturer = android.os.Build.MANUFACTURER.trim()
+        return if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
     @JvmStatic external fun initialize(context: Context)
     @JvmStatic external fun event(message: String)
     fun emit(op: String, vararg fields: Pair<String, Any?>) {
@@ -64,6 +82,18 @@ object Bridge {
                 } else if (command.getString("op") == "pick") {
                     activity.get()?.pick(command.optString("kind", "file"), command.optString("owner"))
                         ?: emit("error", "message" to "Open the app to select an audio file")
+                } else if (command.getString("op") == "sync-scan") {
+                    activity.get()?.scanSyncQr(command.getString("prompt"))
+                } else if (command.getString("op") == "sync-network") {
+                    if (command.getBoolean("enabled")) {
+                        if (syncMulticast == null) {
+                            val wifi = context.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+                            syncMulticast = wifi.createMulticastLock("carlitos-sync").apply { setReferenceCounted(false); acquire() }
+                        }
+                    } else {
+                        syncMulticast?.let { if (it.isHeld) it.release() }
+                        syncMulticast = null
+                    }
                 } else {
                     audio(command)
                 }

@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn restoring_a_paused_position_does_not_create_a_new_listening_revision() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, _commands) = controller(temp.path())?;
+    let part = app.library.parts[0].id;
+    app.library.session.current = Some(Target::Book(part));
+    app.library.update_progress(3_123, false);
+    let updated = app.library.progress[0].updated;
+    app.save()?;
+    app.load(part, 3_123, false)?;
+    // Different decoders may round their initial seek to a frame boundary.
+    for position in [3_120, 3_123, 3_120] {
+        app.handle(Command::Playback(Playback {
+            token: app.token,
+            position,
+            phase: crate::player::Phase::Ready,
+            seekable: true,
+            ..Default::default()
+        }))?;
+    }
+    app.save()?;
+    let saved = app.store()?.load()?;
+    assert_eq!(saved.progress[0].updated, updated);
+    assert_eq!(saved.progress[0].position, 3_123);
+    app.seek_to(1_000);
+    app.handle(Command::Playback(Playback {
+        token: app.token,
+        position: 1_000,
+        seek_done: true,
+        phase: crate::player::Phase::Ready,
+        ..Default::default()
+    }))?;
+    let saved = app.store()?.load()?;
+    assert_eq!(saved.progress[0].position, 1_000);
+    assert!(saved.progress[0].updated > updated);
+    Ok(())
+}
+
+#[test]
 fn unavailable_database_and_audio_together_do_not_prevent_quit() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (mut app, _commands) = controller(temp.path())?;

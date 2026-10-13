@@ -16,12 +16,12 @@ fn checkpoints_write_only_changed_progress_and_session() -> Result<()> {
 
     library.update_progress(14_000, false);
     store.save(&library.session, &library.progress)?;
-    assert_eq!(store.conn.total_changes() - saved, 2);
+    assert_eq!(store.conn.total_changes() - saved, 3);
     let saved = store.conn.total_changes();
     library.progress[0].completed = true;
     library.progress[0].updated += 1;
     store.save(&library.session, &library.progress)?;
-    assert_eq!(store.conn.total_changes() - saved, 1);
+    assert_eq!(store.conn.total_changes() - saved, 2);
     let restored = store.load()?;
     assert_eq!(restored.session.position, 14_000);
     assert_eq!(restored.progress[0].position, 10_000);

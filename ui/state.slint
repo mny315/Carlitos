@@ -2,8 +2,21 @@ export struct BookItem { key: string, title: string, author: string, detail: str
 export struct PartItem { key: string, title: string, detail: string, number: string, active: bool, chapter: bool }
 export struct ImportItem { title: string, author: string, detail: string, included: bool }
 export struct SourceItem { key: string, path: string, detail: string, selected: bool }
+export struct SyncPeer { key: string, name: string, online: bool }
 import { Theme } from "components/theme.slint";
 export global State {
+    in-out property <bool> local-sync;
+    in-out property <bool> sync-indexing;
+    in-out property <bool> sync-busy;
+    in-out property <bool> sync-error;
+    in-out property <string> sync-name;
+    in-out property <string> sync-message;
+    in-out property <string> sync-invitation;
+    in-out property <string> sync-code;
+    in-out property <image> sync-qr;
+    in-out property <string> sync-input;
+    in-out property <bool> sync-manual;
+    in-out property <[SyncPeer]> sync-peers;
     pure callback display-path(string) -> string;
     out property <[string]> sort-labels: [Theme.t("Сначала начатые", "Started first"), Theme.t("По названию", "Title"), Theme.t("По автору", "Author"), Theme.t("По году", "Year"), Theme.t("По жанру", "Genre")];
     out property <[string]> theme-labels: [Theme.t("Тёмная тема", "Dark theme"), Theme.t("Светлая тема", "Light theme"), Theme.t("Как в системе", "System theme")];

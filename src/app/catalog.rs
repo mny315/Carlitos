@@ -63,7 +63,13 @@ impl Controller {
             part_id: last.id,
             position,
             completed: true,
-            updated: now(),
+            updated: now_millis().max(
+                self.library
+                    .progress
+                    .iter()
+                    .find(|p| p.book_id == book)
+                    .map_or(0, |p| p.updated.saturating_add(1)),
+            ),
         });
         let mut session = self.library.session.clone();
         if active {

@@ -1,7 +1,8 @@
 import { Palette } from "std-widgets.slint";
-import { State, BookItem, PartItem, ImportItem, SourceItem } from "state.slint";
+import { State, BookItem, PartItem, ImportItem, SourceItem, SyncPeer } from "state.slint";
 import { Theme } from "components/theme.slint";
 import { Action, Label, PageFrame } from "components/controls.slint";
+import { SyncAction } from "components/sync-action.slint";
 import { PlayerPanel, MobilePlayer } from "components/player.slint";
 import { AppDialog } from "components/dialog.slint";
 import { BookMenu } from "components/book-menu.slint";
@@ -10,7 +11,7 @@ import { LibraryPage } from "pages/library.slint";
 import { BookPage } from "pages/book.slint";
 import { ImportPage } from "pages/import.slint";
 import { SettingsPage, SourcesPage, AboutPage } from "pages/settings.slint";
-export { State, Theme, Palette, BookItem, PartItem, ImportItem, SourceItem }
+export { State, Theme, Palette, BookItem, PartItem, ImportItem, SourceItem, SyncPeer }
 export component AppWindow inherits Window {
     title: "Carlitos";
     icon: @image-url("../data/icons/io.github.mny315.Carlitos.svg");
@@ -96,14 +97,15 @@ export component AppWindow inherits Window {
         VerticalLayout {
             spacing: 0px;
             if State.android && !State.keyboard-visible && !(State.page == 0 && State.search-open): Rectangle {
-                height: Theme.action-height + 17px;
+                height: Theme.action-height + 9px;
                 background: Theme.surface;
                 Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: Theme.line; }
                 HorizontalLayout {
-                    padding-left: 16px; padding-right: 8px; padding-top: 8px; padding-bottom: 9px; spacing: 4px;
+                    padding-left: 16px; padding-right: 8px; padding-top: 4px; padding-bottom: 5px; spacing: 4px;
                     Label { text: "Carlitos"; font-size: 20px * Theme.font-scale; font-weight: 650; }
                     if State.page != 0: Action { icon: @image-url("icons/book.svg"); accessible-label: Theme.t("Библиотека", "Library"); quiet: true; clicked => { State.navigate(0); } }
                     if State.page == 0: Action { icon: @image-url("icons/search.svg"); accessible-label: Theme.t("Поиск книг", "Search books"); quiet: true; clicked => { library.focus-search(); } }
+                    if State.page == 0 && State.local-sync: SyncAction { icon-only: true; quiet: true; }
                     if State.page == 0: Action { icon: @image-url("icons/plus.svg"); accessible-label: Theme.t("Добавить книги", "Add books"); quiet: true; clicked => { State.navigate(2); } }
                     Action {
                         icon: @image-url("icons/more.svg"); accessible-label: Theme.t("Меню", "Navigation menu");
@@ -132,6 +134,8 @@ export component AppWindow inherits Window {
                     }
                 }
                 VerticalLayout { padding: State.compact ? 12px : 28px; spacing: State.compact ? 12px : 16px;
+                    // Mobile scrolling pages reach the header's divider.
+                    padding-top: State.android ? 0px : State.compact ? 12px : 28px;
                     // Scroll lists meet the player's divider without a blank strip.
                     padding-bottom: State.page == 0 || State.page == 1 || State.page == 4 ? 0px : State.compact ? 12px : 28px;
                     if State.compact && !State.android: HorizontalLayout { height: Theme.action-height; spacing: 4px;

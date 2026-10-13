@@ -147,6 +147,18 @@ impl View {
                     .map(|e| Command::Error(format!("{e:#}")))
             }
             "resume" => id.map(Command::Resume),
+            "sync-invite" => Some(Command::Sync(crate::sync::Request::Invite)),
+            "sync-cancel" => Some(Command::Sync(crate::sync::Request::CancelInvite)),
+            "sync-now" => Some(Command::Sync(crate::sync::Request::Now)),
+            "sync-forget" => Some(Command::Sync(crate::sync::Request::Forget(arg.into()))),
+            "sync-pair" => {
+                let value = state.get_sync_input().to_string();
+                state.set_sync_input("".into());
+                Some(Command::Sync(crate::sync::Request::Pair(value)))
+            }
+            #[cfg(target_os = "android")]
+            "sync-scan" => crate::android::bridge::dispatch(serde_json::json!({"op":"sync-scan", "prompt":super::super::text("Наведите камеру на QR-код Carlitos на другом устройстве", "Scan the Carlitos QR code on the other device")}))
+                .err().map(|e| Command::Error(format!("{e:#}"))),
             "toggle" => Some(Command::Toggle),
             "previous" => Some(Command::Next(false)),
             "next" => Some(Command::Next(true)),

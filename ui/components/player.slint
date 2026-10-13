@@ -63,10 +63,10 @@ export component MobileTimeline inherits HorizontalLayout {
 }
 
 export component MobilePlayer inherits Rectangle {
-    height: State.short-screen ? Theme.action-height + 16px : Theme.action-height * 3 + 24px;
+    height: State.short-screen ? Theme.action-height + 8px : Theme.action-height * 3 + 16px;
     background: Theme.surface;
     Rectangle { x: 0px; y: 0px; width: parent.width; height: 1px; background: Theme.line; }
-    VerticalLayout { padding: 8px; spacing: 4px;
+    VerticalLayout { padding-left: 8px; padding-right: 8px; padding-top: 4px; padding-bottom: 4px; spacing: 4px;
         HorizontalLayout { spacing: 4px;
             Rectangle {
                 horizontal-stretch: 1;
@@ -134,10 +134,10 @@ export component PlayerPanel inherits Rectangle {
     Timer { interval: 40ms; running: root.transitioning;
         triggered => { if (root.progress >= 1) { root.finish-transition(); } }
     }
-    height: State.compact ? max(38px, Theme.body + 20px) * 4 + 36px : max(44px, Theme.body + 12px + 6px) + max(38px, Theme.body + 20px) * 2 + 32px;
+    height: State.compact ? max(38px, Theme.body + 20px) * 4 + 28px : max(44px, Theme.body + 12px + 6px) + max(38px, Theme.body + 20px) * 2 + 24px;
     background: Theme.surface;
     Rectangle { x: 0px; y: 0px; height: 1px; width: parent.width; background: Theme.line; }
-    VerticalLayout { padding: 12px; spacing: 4px;
+    VerticalLayout { padding-left: 12px; padding-right: 12px; padding-top: 8px; padding-bottom: 8px; spacing: 4px;
         HorizontalLayout { spacing: 12px; height: State.compact ? max(38px, Theme.body + 20px) : max(44px, Theme.body + 12px + 6px);
             Rectangle { horizontal-stretch: 1; preferred-width: State.compact ? 180px : 226px;
                 BookIdentity { info: root.shown; }

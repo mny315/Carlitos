@@ -1,4 +1,4 @@
-use super::{Id, Library, Media, Millis, Part, Progress, Target, now};
+use super::{Id, Library, Media, Millis, Part, Progress, Target, now_millis};
 
 impl Library {
     pub fn media(&self, id: Id) -> Option<&Media> {
@@ -38,12 +38,18 @@ impl Library {
         if let Some(Target::Book(id)) = self.session.current
             && let Some(part) = self.part(id)
         {
+            let previous = self.progress.iter().find(|p| p.book_id == part.book_id);
+            if previous.is_some_and(|p| {
+                p.part_id == id && p.position == position && p.completed == completed
+            }) {
+                return;
+            }
             let progress = Progress {
                 book_id: part.book_id,
                 part_id: id,
                 position,
                 completed,
-                updated: now(),
+                updated: now_millis().max(previous.map_or(0, |p| p.updated.saturating_add(1))),
             };
             self.progress.retain(|p| p.book_id != progress.book_id);
             self.progress.push(progress);

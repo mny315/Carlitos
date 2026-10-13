@@ -34,6 +34,8 @@ impl PendingEvents {
 fn supersedes(new: &Event, old: &Event) -> bool {
     match (new, old) {
         (Event::CoverPrepared(..), Event::CoverPrepared(..))
+        | (Event::SyncStatus(_), Event::SyncStatus(_))
+        | (Event::SyncIndexing(_), Event::SyncIndexing(_))
         | (Event::Notice(_), Event::Notice(_))
         | (Event::Scanning(..), Event::Scanning(..))
         | (Event::SourceUpdating(_), Event::SourceUpdating(_))

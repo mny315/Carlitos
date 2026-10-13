@@ -60,6 +60,7 @@ cases = [
     ("cover-theme-dark", "1000x700", "dark", "ru", ["--test-cover-theme"]),
     ("cover-theme-light", "360x480", "light", "ru", ["--test-cover-theme"]),
     ("settings-dark", "1000x700", "dark", "ru", ["--page", "3"]),
+    ("settings-tall", "1263x1368", "dark", "en", ["--page", "3"]),
     ("settings-narrow", "360x480", "light", "ru", ["--page", "3"]),
     ("import-narrow", "360x480", "dark", "ru", ["--page", "2"]),
     ("about", "1000x700", "light", "en", ["--page", "5"]),
@@ -67,6 +68,11 @@ cases = [
     ("about-controls", "1000x1000", "dark", "ru", ["--page", "5"]),
     ("about-controls-narrow", "360x1000", "light", "ru", ["--page", "5"]),
     ("sources", "1000x700", "dark", "ru", ["--page", "4"]),
+]
+cases += [
+    (f"sync-{scene}-{theme}", size, theme, language, ["--test-sync-ui", scene])
+    for scene in ("disabled", "enabled", "manual", "qr", "peers", "error", "library")
+    for theme, language, size in (("dark", "ru", "1000x900"), ("light", "en", "360x900"))
 ]
 if options.cases:
     unknown = set(options.cases) - {case[0] for case in cases}

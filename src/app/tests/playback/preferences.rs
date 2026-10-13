@@ -1,6 +1,53 @@
 use super::super::*;
 
 #[test]
+fn each_book_restores_its_speed_across_switches_and_restart() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let library = fixture(temp.path())?;
+    let first = library.parts[0].id;
+    let first_book = library.books[0].id;
+    let folder = temp.path().join("Second book");
+    std::fs::create_dir(&folder)?;
+    std::fs::copy(
+        local_path(&library.media[0].uri).unwrap(),
+        folder.join("part.wav"),
+    )?;
+    let scan = import::scan(vec![folder], ImportMode::Book, ScanControl::default())?;
+    let mut store = Store::open(&temp.path().join("db"))?;
+    let library = store.import(scan.drafts)?;
+    let second = library
+        .parts
+        .iter()
+        .find(|p| p.book_id != first_book)
+        .unwrap();
+    store.save_book_rate(first_book, 1.25)?;
+    store.save_book_rate(second.book_id, 2.0)?;
+    let mut app = start(temp.path());
+    wait(&app, |e| matches!(e, Event::Library(_)))?;
+    for (part, rate) in [(first, 1.25), (second.id, 2.0), (first, 1.25)] {
+        app.tx.send(Command::Part(part, 0))?;
+        wait(
+            &app,
+            |e| matches!(e, Event::Library(l) if l.session.current == Some(Target::Book(part))),
+        )?;
+        assert_eq!(ready(&app, 0, true)?.rate, rate);
+    }
+    app.tx.send(Command::Rate(1.75))?;
+    wait(
+        &app,
+        |e| matches!(e, Event::Playback(p) if p.rate == 1.75 && p.phase == crate::player::Phase::Ready),
+    )?;
+    quit(&mut app)?;
+    assert_eq!(store.book_rate(first_book)?, Some(1.75));
+    assert_eq!(store.book_rate(second.book_id)?, Some(2.0));
+    let position = store.load()?.session.position;
+    let mut restored = start(temp.path());
+    assert_eq!(ready(&restored, position, false)?.rate, 1.75);
+    quit(&mut restored)?;
+    Ok(())
+}
+
+#[test]
 fn pending_audio_preferences_survive_a_load_before_their_acknowledgement() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (mut app, _commands) = controller(temp.path())?;

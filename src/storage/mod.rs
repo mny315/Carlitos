@@ -3,6 +3,7 @@ mod documents;
 mod import;
 mod migrations;
 mod sources;
+mod sync;
 #[cfg(test)]
 mod tests;
 
@@ -178,6 +179,7 @@ impl Store {
             session.current = None;
             session.position = 0;
         }
+        tx.execute("INSERT INTO sync_changes SELECT id,?2,(SELECT id FROM sync_identity),1 FROM books WHERE id=?1 ON CONFLICT(book_id) DO UPDATE SET updated=MAX(excluded.updated,sync_changes.updated+1),device=excluded.device,reset=1", params![id, now_millis()])?;
         tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
         save_session(&tx, &session)?;
         tx.commit()?;

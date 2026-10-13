@@ -10,8 +10,8 @@ pub(super) fn migrate(conn: &mut Connection) -> Result<()> {
     let result = (|| -> Result<()> {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        ensure!(version <= 5, "Library schema changed during migration");
-        if version == 5 {
+        ensure!(version <= 7, "Library schema changed during migration");
+        if version >= 5 {
             // Another connection may have migrated while we waited for its lock.
             return Ok(());
         }

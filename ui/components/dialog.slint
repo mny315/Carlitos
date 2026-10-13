@@ -68,7 +68,7 @@ export component AppDialog inherits Rectangle {
         background: Theme.surface; border-radius: root.popup-menu ? 12px : State.android ? 20px : 12px; border-width: 1px; border-color: Theme.line;
         TouchArea { }
         ScrollView { dialog := VerticalLayout { padding: root.popup-menu ? 8px : 20px; spacing: root.popup-menu ? 0px : 16px;
-            if !root.popup-menu: Label { text: root.dialog-kind == 1 ? Theme.t("Удалить из библиотеки?", "Remove from library?") : root.dialog-kind == 2 ? Theme.t("Редактировать книгу", "Edit book") : root.dialog-kind == 3 ? Theme.t("Перейти ко времени", "Go to time") : root.dialog-kind == 5 ? Theme.t("Обновить источник", "Update source") : root.dialog-kind == 6 ? Theme.t("Скорость воспроизведения", "Playback speed") : root.dialog-kind == 7 ? Theme.t("Громкость", "Volume") : root.dialog-kind == 9 ? Theme.t("Сортировка", "Sort by") : root.dialog-kind == 10 ? Theme.t("Оформление", "Appearance") : root.dialog-kind == 11 ? Theme.t("Язык", "Language") : root.dialog-kind == 8 ? Theme.t("Воспроизведение", "Playback") : Theme.t("Трей недоступен", "Tray unavailable"); font-size: (22px) * Theme.font-scale; font-weight: 600; wrap: word-wrap; }
+            if !root.popup-menu: Label { text: root.dialog-kind == 1 ? Theme.t("Удалить из библиотеки?", "Remove from library?") : root.dialog-kind == 2 ? Theme.t("Редактировать книгу", "Edit book") : root.dialog-kind == 3 ? Theme.t("Перейти ко времени", "Go to time") : root.dialog-kind == 5 ? Theme.t("Обновить источник", "Update source") : root.dialog-kind == 6 ? Theme.t("Скорость воспроизведения", "Playback speed") : root.dialog-kind == 7 ? Theme.t("Громкость", "Volume") : root.dialog-kind == 9 ? Theme.t("Сортировка", "Sort by") : root.dialog-kind == 10 ? Theme.t("Оформление", "Appearance") : root.dialog-kind == 11 ? Theme.t("Язык", "Language") : root.dialog-kind == 8 ? Theme.t("Воспроизведение", "Playback") : Theme.t("Трей недоступен", "Tray unavailable"); font-size: (22px) * Theme.font-scale; font-weight: 600; wrap: word-wrap; horizontal-alignment: root.dialog-kind == 6 ? center : left; }
             if root.navigation-menu: VerticalLayout { spacing: 4px;
                 Action { text: Theme.t("Библиотека", "Library"); icon: @image-url("../icons/book.svg"); fill: true; quiet: true; selected: State.page == 0 || State.page == 1; clicked => { State.navigate(0); root.dismiss(); } }
                 Action { text: Theme.t("Источники", "Sources"); icon: @image-url("../icons/folder.svg"); fill: true; quiet: true; selected: State.page == 4; clicked => { State.navigate(4); root.dismiss(); } }
@@ -113,7 +113,7 @@ export component AppDialog inherits Rectangle {
                     changed(v) => { State.set-rate(round((0.5 + v * 2.5) * 20) / 20); }
                 }
                 HorizontalLayout { spacing: 8px;
-                    for rate in [1, 1.5, 2]: Action { fill: State.android; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001; clicked => { State.set-rate(rate); } }
+                    for rate in [1, 1.5, 2]: Action { fill: true; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001; clicked => { State.set-rate(rate); } }
                 }
                 if !State.android: Label { text: Theme.t("От 0,5× до 3× · шаг 0,05×", "0.5× to 3× · step 0.05×"); color: Theme.muted; wrap: word-wrap; horizontal-alignment: center; }
             }
@@ -144,12 +144,12 @@ export component AppDialog inherits Rectangle {
             if root.dialog-kind == 5: Label { text: Theme.t("Найдём новые книги и обновим сведения. Если папка перемещена, выберите её новое расположение — прогресс сохранится.", "Find new books and refresh their details. If the folder moved, choose its new location — listening progress is kept."); wrap: word-wrap; color: Theme.muted; }
             if root.dialog-kind == 5 && State.source-error != "": Label { text: State.source-error; wrap: word-wrap; color: Theme.danger; font-size: (12px) * Theme.font-scale; }
             if root.dialog-kind == 4: Label { text: Theme.t("Сейчас нет панели, из которой можно вернуть окно.", "There is no tray host to bring the window back."); wrap: word-wrap; color: Theme.muted; }
-            if !root.popup-menu: HorizontalLayout { spacing: 8px; alignment: State.android && root.dialog-kind >= 6 ? stretch : end;
+            if !root.popup-menu: HorizontalLayout { spacing: 8px; alignment: root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6) ? stretch : end;
                 // Android keeps preedit outside edit-title until Action takes
                 // focus. Allow Done to commit it; the controller validates the
                 // resulting title before saving.
                 if root.dialog-kind < 6: Action { text: root.dialog-kind == 4 ? Theme.t("Оставить", "Keep open") : root.dialog-kind == 5 && State.source-busy ? Theme.t("Закрыть", "Close") : Theme.t("Отмена", "Cancel"); clicked => { State.overlay = 0; } }
-                Action { fill: State.android && root.dialog-kind >= 6; centered: true; text: root.dialog-kind == 1 ? Theme.t("Удалить", "Remove") : root.dialog-kind == 4 ? Theme.t("Выйти", "Quit") : root.dialog-kind == 5 ? (State.source-busy ? Theme.t("Обновляем…", "Updating…") : Theme.t("Обновить", "Update")) : Theme.t("Готово", "Done"); primary: true; enabled: (root.dialog-kind != 2 || (!State.cover-loading && (State.android || State.edit-title != ""))) && (root.dialog-kind != 5 || (!State.source-busy && State.relocate-path != "")); clicked => {
+                Action { fill: root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6); centered: true; text: root.dialog-kind == 1 ? Theme.t("Удалить", "Remove") : root.dialog-kind == 4 ? Theme.t("Выйти", "Quit") : root.dialog-kind == 5 ? (State.source-busy ? Theme.t("Обновляем…", "Updating…") : Theme.t("Обновить", "Update")) : Theme.t("Готово", "Done"); primary: true; enabled: (root.dialog-kind != 2 || (!State.cover-loading && (State.android || State.edit-title != ""))) && (root.dialog-kind != 5 || (!State.source-busy && State.relocate-path != "")); clicked => {
                     if (root.dialog-kind == 1) { State.action("remove-" + State.remove-kind, State.remove-key); State.overlay = 0; }
                     else if (root.dialog-kind == 2) { State.action("edit", ""); }
                     else if (root.dialog-kind == 3) { State.action("exact-time", State.exact-time); }

@@ -11,6 +11,7 @@ import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
+import com.google.zxing.integration.android.IntentIntegrator
 
 class MainActivity : NativeActivity() {
     private var backCallback: OnBackInvokedCallback? = null
@@ -108,6 +109,11 @@ class MainActivity : NativeActivity() {
     @Deprecated("NativeActivity uses the platform result callback")
     override fun onActivityResult(request: Int, result: Int, data: Intent?) {
         super.onActivityResult(request, result, data)
+        if (request == IntentIntegrator.REQUEST_CODE) {
+            val scan = IntentIntegrator.parseActivityResult(request, result, data)
+            scan?.contents?.let { Bridge.emit("sync-pair", "code" to it) }
+            return
+        }
         // Capture before provider work: the user may open another editor
         // while stat/probe runs, and this Activity may be recreated meanwhile.
         val owner = pickerOwners.remove(request).orEmpty()
@@ -127,6 +133,11 @@ class MainActivity : NativeActivity() {
                 Bridge.emit("error", "message" to (Documents.accessError(error) ?: error.message ?: error.toString()))
             }
         }
+    }
+    @Suppress("DEPRECATION")
+    fun scanSyncQr(prompt: String) {
+        IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt(prompt).setBeepEnabled(false).setOrientationLocked(false).initiateScan()
     }
     companion object {
         private val documents = Executors.newSingleThreadExecutor { work -> Thread(work, "carlitos-documents") }

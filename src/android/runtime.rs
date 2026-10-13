@@ -22,6 +22,8 @@ struct Mailbox {
     source_updating: bool,
     hidden: bool,
     status_dirty: bool,
+    sync: crate::sync::Status,
+    sync_indexing: bool,
     pending: PendingEvents,
     subscriber: Option<async_channel::Sender<Event>>,
 }
@@ -86,6 +88,8 @@ pub fn initialize(options: Options) -> Result<()> {
                         // Consuming a status in one View must not erase it for
                         // the next Activity. Keep live events in order as well.
                         match &event {
+                            Event::SyncStatus(status) => cache.sync = status.clone(),
+                            Event::SyncIndexing(active) => cache.sync_indexing = *active,
                             Event::Scanning(active, message) => {
                                 cache.scanning = (*active, message.clone());
                             }
@@ -169,6 +173,8 @@ pub fn take_events() -> UiEvents {
         events.push(Event::Drafts(drafts.clone(), issues.clone()));
     }
     if std::mem::take(&mut cache.status_dirty) {
+        events.push(Event::SyncStatus(cache.sync.clone()));
+        events.push(Event::SyncIndexing(cache.sync_indexing));
         events.push(Event::Scanning(cache.scanning.0, cache.scanning.1.clone()));
         events.push(Event::SourceUpdating(cache.source_updating));
         events.push(Event::Hidden(cache.hidden));

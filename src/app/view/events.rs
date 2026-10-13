@@ -13,6 +13,32 @@ impl View {
         };
         let state = w.global::<State>();
         match event {
+            Event::SyncIndexing(active) => state.set_sync_indexing(active),
+            Event::SyncStatus(status) => {
+                state.set_sync_busy(status.busy);
+                state.set_sync_error(status.error);
+                state.set_sync_code(status.code.into());
+                if state.get_sync_invitation() != status.invitation {
+                    state.set_sync_qr(if status.invitation.is_empty() {
+                        slint::Image::default()
+                    } else {
+                        crate::sync::qr_image(&status.invitation).unwrap_or_default()
+                    });
+                    state.set_sync_invitation(status.invitation.into());
+                }
+                state.set_sync_name(status.name.into());
+                state.set_sync_message(status.message.into());
+                let peers: Vec<_> = status
+                    .peers
+                    .into_iter()
+                    .map(|p| crate::SyncPeer {
+                        key: p.id.into(),
+                        name: p.name.into(),
+                        online: p.online,
+                    })
+                    .collect();
+                state.set_sync_peers(slint::ModelRc::new(slint::VecModel::from(peers)));
+            }
             #[cfg(target_os = "android")]
             Event::AndroidRefresh => {}
             #[cfg(target_os = "android")]

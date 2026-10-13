@@ -34,6 +34,15 @@ impl Controller {
                 "Audio is unavailable. Restart the application."
             )
         );
+        let book = self.library.part(id).context("Book part missing")?.book_id;
+        let saved_rate = self.store()?.book_rate(book)?;
+        let pending = self.pending_rate.filter(|(id, _)| *id == book);
+        self.requested_rate = pending
+            .map(|(_, rate)| rate)
+            .or(saved_rate)
+            .unwrap_or(self.requested_rate);
+        self.pending_rate =
+            pending.or_else(|| saved_rate.is_none().then_some((book, self.requested_rate)));
         if self.library.session.current != Some(Target::Book(id)) {
             self.save()?;
             self.library.session.position = self
@@ -44,6 +53,13 @@ impl Controller {
                 .map_or(0, |progress| progress.position);
         }
         self.library.session.current = Some(Target::Book(id));
+        self.restore_progress = (!playing
+            && self
+                .library
+                .progress
+                .iter()
+                .any(|p| p.part_id == id && p.position == position))
+        .then_some(id);
         // The requested chapter/seek position belongs to Playback until Ready.
         // A missing source must not replace the last confirmed checkpoint.
         // Persist a new selection as soon as the decoder confirms its position,
@@ -70,7 +86,6 @@ impl Controller {
                 .part(id)
                 .map(|part| part.title.clone())
                 .unwrap_or_default(),
-            #[cfg(target_os = "android")]
             rate: self.requested_rate,
             #[cfg(target_os = "android")]
             skip_silence: self.requested_skip_silence,
@@ -87,6 +102,9 @@ impl Controller {
         self.library.part(*id).map(|p| p.book_id)
     }
     pub(super) fn play(&mut self, value: bool) -> Result<()> {
+        if value {
+            self.restore_progress = None;
+        }
         let Some(Target::Book(id)) = self.library.session.current else {
             return Ok(());
         };
@@ -125,10 +143,13 @@ impl Controller {
         self.token = self.token.wrapping_add(1);
         self.playback.token = self.token;
         self.playback.position = position;
+        self.restore_progress = None;
         self.playback.phase = crate::player::Phase::Seeking;
         self.audio.send(AudioCommand::Seek(self.token, position));
     }
     pub(super) fn stop(&mut self) {
+        self.pending_rate = None;
+        self.restore_progress = None;
         self.token = self.token.wrapping_add(1);
         self.audio.send(AudioCommand::Stop(self.token));
         self.library.session.current = None;

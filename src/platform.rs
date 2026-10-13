@@ -1,5 +1,36 @@
 use std::{fs::Metadata, path::Path};
 
+/// Display name only; pairing continues to use the library's stable random ID.
+pub fn device_name() -> String {
+    #[cfg(target_os = "android")]
+    let name = crate::android::bridge::device_name().unwrap_or_default();
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").unwrap_or_default();
+    #[cfg(not(any(windows, target_os = "android")))]
+    let name = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .unwrap_or_default();
+    let mut clean = String::new();
+    for c in name.trim().chars().filter(|c| !c.is_control()) {
+        if clean.len() + c.len_utf8() > 128 {
+            break;
+        }
+        clean.push(c);
+    }
+    if clean.is_empty() {
+        if cfg!(target_os = "android") {
+            "Android"
+        } else if cfg!(windows) {
+            "Windows"
+        } else {
+            "Linux"
+        }
+        .into()
+    } else {
+        clean
+    }
+}
+
 pub fn modified(metadata: &Metadata) -> i64 {
     metadata
         .modified()

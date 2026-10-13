@@ -57,6 +57,8 @@ export component PageFrame inherits Rectangle {
 export component Action inherits Rectangle {
     in property <string> text;
     in property <image> icon;
+    in property <bool> spinning: false;
+    in property <image> trailing-icon;
     in property <bool> primary: false;
     in property <bool> selected: false;
     in property <bool> quiet: false;
@@ -70,7 +72,7 @@ export component Action inherits Rectangle {
     in property <bool> fill: false;
     in property <bool> centered: !fill;
     in property <bool> destructive: false;
-    private property <color> foreground: primary ? Theme.on-accent : destructive ? Theme.danger : selected ? Theme.accent : Theme.text;
+    private property <color> foreground: !visual-enabled ? Theme.muted : primary ? Theme.on-accent : destructive ? Theme.danger : selected ? Theme.accent : Theme.text;
     in property <int> font-weight: primary ? 600 : 400;
     callback clicked;
     public function activate() { focus.focus(); Theme.haptic("button"); root.clicked(); }
@@ -92,9 +94,10 @@ export component Action inherits Rectangle {
     accessible-enabled: enabled;
     accessible-action-default => { if (root.enabled) { root.activate(); } }
     row := HorizontalLayout {
-        padding-left: 12px; padding-right: 12px; spacing: 8px; alignment: root.centered ? center : start;
-        if root.icon.width > 0: Rectangle { width: 19px; Image { source: root.icon; colorize: root.foreground; width: 19px; height: 19px; y: (parent.height - self.height) / 2; } }
+        padding-left: 12px; padding-right: 12px; spacing: 8px; alignment: root.trailing-icon.width > 0 ? stretch : root.centered ? center : start;
+        if root.icon.width > 0: Rectangle { width: 19px; Image { source: root.icon; colorize: root.foreground; width: 19px; height: 19px; y: (parent.height - self.height) / 2; transform-rotation: root.spinning && !Theme.reduced-motion ? mod(animation-tick() / 1ms, 1000) * 0.36deg : 0deg; } }
         if root.text != "": Label { text: root.text; color: root.foreground; font-weight: root.font-weight; }
+        if root.trailing-icon.width > 0: Rectangle { width: 19px; Image { source: root.trailing-icon; colorize: root.foreground; width: 19px; height: 19px; y: (parent.height - self.height) / 2; } }
     }
     focus := FocusScope {
         enabled: root.enabled;
@@ -113,6 +116,7 @@ export component Field inherits Rectangle {
     in property <bool> read-only: false;
     in property <string> placeholder;
     in property <string> label: placeholder;
+    in property <length> text-size: Theme.body;
     callback edited(string);
     callback accepted(string);
     forward-focus: input;
@@ -126,7 +130,7 @@ export component Field inherits Rectangle {
         x: 13px; y: 8px; width: parent.width - 26px; height: parent.height - 16px;
         text <=> root.text;
         read-only: root.read-only;
-        font-size: Theme.body;
+        font-size: root.text-size;
         color: Theme.text;
         selection-background-color: Theme.accent;
         selection-foreground-color: Theme.on-accent;

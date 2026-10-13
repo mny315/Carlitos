@@ -2,6 +2,7 @@ import { ListView, ComboBox } from "std-widgets.slint";
 import { State, BookItem } from "../state.slint";
 import { Theme } from "../components/theme.slint";
 import { Action, Label, Field, Meter, Cover, PlaybackIndicator } from "../components/controls.slint";
+import { SyncAction } from "../components/sync-action.slint";
 
 component BookRow inherits Rectangle {
     in property <BookItem> book;
@@ -176,6 +177,7 @@ export component LibraryPage inherits VerticalLayout {
             Label { text: Theme.t("Библиотека", "Library"); font-size: (State.compact ? 26px : 30px) * Theme.font-scale; font-weight: 650; }
             if !State.compact: Label { text: Theme.t("Хорошая история всегда рядом", "A good story, always within reach"); color: Theme.muted; }
         }
+        if State.local-sync: SyncAction { }
         Action { text: State.compact ? "" : Theme.t("Добавить книги", "Add books"); icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
     }
     Rectangle {
@@ -192,6 +194,7 @@ export component LibraryPage inherits VerticalLayout {
                 accessible-label: Theme.t("Закрыть поиск", "Close search");
                 clicked => { State.close-search(); }
             }
+            if State.compact && !State.android && State.local-sync: SyncAction { icon-only: true; }
             if State.compact && !State.android: Action { icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
         }
     }

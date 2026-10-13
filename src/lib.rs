@@ -14,6 +14,7 @@ pub mod settings;
 mod silence;
 pub mod source;
 pub mod storage;
+pub mod sync;
 #[cfg(windows)]
 pub mod windows;
 

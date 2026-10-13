@@ -51,6 +51,7 @@ impl View {
             _ => 0,
         });
         s.set_close_to_tray(self.settings.close_to_tray);
+        s.set_local_sync(self.settings.local_sync);
         s.set_rate(self.settings.playback_rate as f32);
         s.set_skip_silence(self.settings.skip_silence);
         let sort_index = ["listening", "title", "author", "year", "genre"]
@@ -109,6 +110,7 @@ impl View {
             .unwrap_or(&"system")
             .to_string();
         self.settings.close_to_tray = s.get_close_to_tray();
+        self.settings.local_sync = s.get_local_sync();
         self.settings.reduced_motion = t.get_reduced_motion();
         self.settings.text_scale = s.get_text_size_percent().clamp(70, 205) as f32 / 100.0;
         self.settings.android_ui_scale = s.get_ui_scale_percent().clamp(70, 160) as f32 / 100.0;

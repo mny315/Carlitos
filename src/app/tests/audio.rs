@@ -55,6 +55,7 @@ fn audio_retains_eos_when_a_new_command_overtakes_its_snapshot() -> Result<()> {
     let (tx, rx) = mpsc::channel();
     let audio = Audio::start(tx, true);
     audio.send(AudioCommand::Load {
+        rate: 1.0,
         token: 1,
         uri: library.media[0].uri.clone(),
         position: 11_900,
@@ -100,6 +101,7 @@ fn audio_error_survives_a_new_command_and_clears_when_retrying() -> Result<()> {
         }
     };
     audio.send(AudioCommand::Load {
+        rate: 1.0,
         token: 1,
         uri: missing_uri,
         position: 0,
@@ -114,6 +116,7 @@ fn audio_error_survives_a_new_command_and_clears_when_retrying() -> Result<()> {
     );
     assert!(!failed.playing, "a failed pipeline cannot resume playback");
     audio.send(AudioCommand::Load {
+        rate: 1.0,
         token: 3,
         uri: library.media[0].uri.clone(),
         position: 0,
@@ -129,6 +132,7 @@ fn a_missing_file_does_not_keep_restarting_the_failed_pipeline() -> Result<()> {
     let (tx, rx) = mpsc::channel();
     let audio = Audio::start(tx, true);
     audio.send(AudioCommand::Load {
+        rate: 1.0,
         token: 1,
         uri: file_uri(&temp.path().join("missing.wav"))?,
         position: 0,

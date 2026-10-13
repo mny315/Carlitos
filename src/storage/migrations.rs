@@ -17,7 +17,7 @@ impl Store {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .context("Read library schema version")?;
-        if version > 5 {
+        if version > 7 {
             bail!(tformat!(
                 "Библиотека создана более новой версией Carlitos (схема {version})",
                 version = version
@@ -30,7 +30,7 @@ impl Store {
             // write lock, then commit all legacy steps together.
             let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-            anyhow::ensure!(version <= 5, "Library schema changed during migration");
+            anyhow::ensure!(version <= 7, "Library schema changed during migration");
             if version == 0 {
                 tx.execute_batch(include_str!("schema.sql"))?;
                 tx.pragma_update(None, "user_version", 1)?;
@@ -101,6 +101,12 @@ impl Store {
         }
         if version < 5 {
             document_paths::migrate(&mut conn)?;
+        }
+        if version < 6 {
+            super::sync::migrate(&mut conn)?;
+        }
+        if version < 7 {
+            super::sync::migrate_rates(&mut conn)?;
         }
         Ok(Self { conn })
     }

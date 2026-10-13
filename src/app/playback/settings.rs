@@ -19,6 +19,13 @@ impl Controller {
         self.save()
     }
     pub(in crate::app) fn set_rate(&mut self, rate: f64) -> Result<()> {
+        self.apply_rate(rate)?;
+        self.pending_rate = (!self.options.demo)
+            .then(|| self.active_book().map(|book| (book, rate)))
+            .flatten();
+        Ok(())
+    }
+    pub(in crate::app) fn apply_rate(&mut self, rate: f64) -> Result<()> {
         anyhow::ensure!(
             rate.is_finite() && (crate::player::MIN_RATE..=crate::player::MAX_RATE).contains(&rate),
             text(
@@ -50,6 +57,7 @@ impl Controller {
         self.token = self.token.wrapping_add(1);
         self.playback.token = self.token;
         self.requested_rate = crate::player::stepped_rate(self.requested_rate, forward);
+        self.pending_rate = self.active_book().map(|book| (book, self.requested_rate));
         self.audio.send(AudioCommand::RateStep(self.token, forward));
         Ok(())
     }

@@ -104,6 +104,37 @@ impl Controller {
             );
         }
         match command {
+            Sync(request) => {
+                self.configure_sync()?;
+                if matches!(request, crate::sync::Request::Now) {
+                    self.save()?;
+                    self.sync_hash_attempted.clear();
+                    self.refresh_sync()?;
+                }
+                if let Some(sync) = &self.sync {
+                    sync.request(request);
+                }
+            }
+            SyncRefresh => self.refresh_sync()?,
+            SyncFinished(message) => self.notice(message),
+            SyncFingerprints(fingerprints, done) => {
+                if done {
+                    self.sync_hashing = false;
+                    let _ = self.events.try_send(Event::SyncIndexing(false));
+                }
+                let library = self.library.clone();
+                self.store()?.save_fingerprints(&library, &fingerprints)?;
+                self.publish_sync();
+                if done {
+                    self.refresh_sync()?;
+                }
+            }
+            SyncIncoming(records, rates) => self.receive_sync(records, rates)?,
+            SyncStatus(status) => {
+                if self.sync.is_some() {
+                    let _ = self.events.try_send(Event::SyncStatus(status));
+                }
+            }
             #[cfg(all(target_os = "android", feature = "android-playback-tests"))]
             PlaybackTest(request, reply) => {
                 let result = self.playback_test(request);
@@ -296,6 +327,7 @@ impl Controller {
                 // labels for a newer selection; Event::Settings is applied on
                 // the UI thread along with the rest of the preferences.
                 self.options.settings = settings.clone();
+                self.configure_sync()?;
                 let _ = self.events.try_send(Event::Settings(settings));
                 self.emit_library();
                 saved?;
@@ -317,6 +349,9 @@ impl Controller {
                 }
             }
             Hidden(hidden) => {
+                if !hidden && let Some(sync) = &self.sync {
+                    sync.request(crate::sync::Request::Refresh);
+                }
                 self.pending_save = true;
                 self.audio.send(AudioCommand::Snapshot);
                 let _ = self.events.try_send(Event::Hidden(hidden));

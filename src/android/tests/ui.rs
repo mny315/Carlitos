@@ -10,8 +10,12 @@ use jni::{
 use serde_json::{Value, json};
 use slint::{ComponentHandle, Model};
 
+#[path = "../../../tests/support/animation.rs"]
+mod animation;
+
 thread_local! {
     static HAPTIC_TICKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static ANIMATION_REPORT: std::cell::RefCell<Value> = const { std::cell::RefCell::new(Value::Null) };
 }
 
 pub(super) fn record_haptic(kind: &str) {
@@ -26,7 +30,18 @@ fn request(request: Value) -> Result<Value> {
         let s = w.global::<State>();
         let t = w.global::<Theme>();
         match request["op"].as_str().unwrap_or("state") {
+            "animation-start" => {
+                ANIMATION_REPORT.with_borrow_mut(|r| *r = Value::Null);
+                animation::start(&w, |report| ANIMATION_REPORT.with_borrow_mut(|r| *r = report));
+            }
+            "animation-report" => return Ok(json!({"report":ANIMATION_REPORT.with_borrow(Clone::clone)})),
             "setup" => { s.set_language_index(2); s.set_theme_index(2); s.set_sort_index(0); s.set_text_size_percent(100); s.set_ui_scale_percent(100); t.set_reduced_motion(false); s.invoke_settings_changed(); }
+            "appearance" => {
+                s.set_theme_index(request["theme"].as_i64().unwrap_or(0) as i32);
+                s.set_language_index(request["language"].as_i64().unwrap_or(2) as i32);
+                s.set_text_size_percent(request["text_percent"].as_i64().unwrap_or(100) as i32);
+                s.invoke_settings_changed();
+            }
             "action" => s.invoke_action(request["name"].as_str().unwrap_or("").into(), request["arg"].as_str().unwrap_or("").into()),
             "page" => s.invoke_navigate(request["value"].as_i64().unwrap_or(0) as i32),
             "feedback" => {
@@ -85,6 +100,14 @@ fn request(request: Value) -> Result<Value> {
             "haptic_ticks":HAPTIC_TICKS.get(),"notice":s.get_notice().as_str(),"scanning":s.get_scanning(),
             "scale":w.window().scale_factor(),"width":size.width,"height":size.height});
         snapshot["picker_owner"] = json!(s.get_picker_owner().as_str());
+        snapshot["loading"] = json!(s.get_loading());
+        snapshot["sync_enabled"] = json!(s.get_local_sync());
+        snapshot["sync_manual"] = json!(s.get_sync_manual());
+        snapshot["sync_invitation"] = json!(!s.get_sync_invitation().is_empty());
+        snapshot["sync_peers"] = json!(s.get_sync_peers().row_count());
+        snapshot["sync_message"] = json!(s.get_sync_message().as_str());
+        snapshot["sync_busy"] = json!(s.get_sync_busy());
+        snapshot["sync_indexing"] = json!(s.get_sync_indexing());
         snapshot["source_selection"] = json!(s.get_source_selection());
         snapshot["selected_source_count"] = json!(s.get_selected_source_count());
         snapshot["remove_source_count"] = json!(s.get_remove_source_count());

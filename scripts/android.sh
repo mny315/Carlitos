@@ -11,7 +11,7 @@ case "$task" in
     if [[ $# -gt 0 ]]; then shift; fi
     case "$suite" in
       session) ;;
-      sources|import|playback|ui) task="test-$suite" ;;
+      sources|import|playback|ui|sync) task="test-$suite" ;;
       *) echo "Unknown Android test group: $suite" >&2; exit 2 ;;
     esac
     ;;
@@ -65,7 +65,7 @@ apk_dir="$PWD/android/app/build/outputs/apk/$variant"
 apk="$apk_dir/app-universal-$variant.apk"
 
 case "$task" in
-  test|test-sources|test-import|test-playback|test-ui)
+  test|test-sources|test-import|test-playback|test-ui|test-sync)
     # Device suites may wake the screen for input. Always leave it asleep,
     # including when a build, assertion or instrumentation process fails.
     trap '"$adb" shell input keyevent KEYCODE_SLEEP >/dev/null 2>&1 || true' EXIT
@@ -127,6 +127,7 @@ if [[ "$task" == test-playback || "$task" == test-ui ]]; then
   export CARLITOS_ANDROID_PLAYBACK_TESTS=1
   python3 tests/android/playback-fixtures.py
 fi
+if [[ "$task" == test-sync ]]; then export CARLITOS_ANDROID_PLAYBACK_TESTS=1 CARLITOS_ANDROID_UI_TESTS=1; fi
 if [[ "$task" == test-import ]]; then
   export CARLITOS_ANDROID_IMPORT_TESTS=1
   CARGO_TARGET_DIR="$PWD/target" CARLITOS_ANDROID_FIXTURES="$PWD/target/tests/android/import/fixtures/Carlitos-import" \
@@ -140,9 +141,15 @@ if [[ "$variant" == release ]]; then gradle_tasks=(:app:assembleRelease); fi
 if [[ "$task" == test || "$task" == test-sources || "$task" == test-import || "$task" == test-playback || "$task" == test-ui ]]; then
   gradle_tasks+=(:app:assembleDebugAndroidTest :fixtures:assembleDebug)
 fi
+if [[ "$task" == test-sync ]]; then gradle_tasks+=(:app:assembleDebugAndroidTest); fi
 android/gradlew -p android "${gradle_options[@]}" "${gradle_tasks[@]}"
 echo "Android APK: $apk"
-if [[ "$task" == release || "$task" == debug || "$task" == install || "$task" == run ]]; then
+if [[ "$task" == test-sync ]]; then
+  python3 tests/android/local-sync.py --adb "$adb"
+  exit
+fi
+if [[ ( "$task" == release || "$task" == debug || "$task" == install || "$task" == run ) &&
+      "${CARLITOS_ANDROID_IMPORT_TESTS:-0}" != 1 && "${CARLITOS_ANDROID_PLAYBACK_TESTS:-0}" != 1 && "${CARLITOS_ANDROID_UI_TESTS:-0}" != 1 ]]; then
   mkdir -p target/releases
   app_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
   for abi in armeabi-v7a arm64-v8a universal; do

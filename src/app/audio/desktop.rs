@@ -64,9 +64,12 @@ impl Audio {
                                 uri,
                                 position,
                                 playing,
+                                rate,
                             })) => {
                                 token = next;
-                                player.load(&uri, position, playing)
+                                player
+                                    .load(&uri, position, playing)
+                                    .and_then(|()| player.set_rate(rate))
                             }
                             Input::Command(Ok(AudioCommand::Playing(next, playing))) => {
                                 token = next;

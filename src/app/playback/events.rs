@@ -66,6 +66,14 @@ impl Controller {
                 .try_send(Event::Settings(self.options.settings.clone()));
         }
         if snapshot.phase == crate::player::Phase::Ready {
+            if let Some((book, rate)) = self.pending_rate
+                && self.active_book() == Some(book)
+                && (snapshot.rate - rate).abs() < 0.000_001
+            {
+                self.store()?.save_book_rate(book, rate)?;
+                self.pending_rate = None;
+                self.publish_sync();
+            }
             let completed = self.active_book().is_some_and(|book| {
                 self.library
                     .progress
@@ -77,7 +85,11 @@ impl Controller {
                     || snapshot
                         .duration
                         .is_some_and(|duration| snapshot.position >= duration));
-            self.library.update_progress(snapshot.position, completed);
+            if snapshot.playing
+                || self.library.session.current != self.restore_progress.map(Target::Book)
+            {
+                self.library.update_progress(snapshot.position, completed);
+            }
             if let Some(duration) = snapshot.duration
                 && let Some(Target::Book(id)) = self.library.session.current.clone()
                 && let Some(file_id) = self.library.part(id).map(|p| p.file_id)
@@ -96,6 +108,7 @@ impl Controller {
             }
         }
         if error_changed && let Some(error) = snapshot.error.as_ref() {
+            self.pending_rate = None;
             // Error positions can be zero or an unconfirmed seek target. Keep
             // the last Ready position, but flush it before the process can die.
             // Startup may already have failed to open the database. Its empty

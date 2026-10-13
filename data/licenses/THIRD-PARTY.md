@@ -18,6 +18,10 @@ SQLite is distributed under its public-domain dedication. Other
 Rust dependencies retain the licenses declared in their published packages;
 the exact dependency versions are recorded in Cargo.lock.
 
+Local synchronization uses mdns-sd (Apache-2.0 OR MIT), Snow (Apache-2.0 OR MIT)
+and qrcode (MIT). Android QR scanning uses ZXing Android Embedded 4.3.0 by
+Journey Mobile and ZXing Core by the ZXing authors, under Apache-2.0.
+
 The shared M4B chapter reader uses mp4ameta 0.13.0 (MIT OR Apache-2.0).
 Its source, license texts and local chapter-table patch are in vendor/mp4ameta.
 

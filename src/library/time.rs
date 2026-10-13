@@ -6,6 +6,13 @@ pub fn now() -> i64 {
         .unwrap_or_default()
         .as_secs() as i64
 }
+pub fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
 pub fn format_time(ms: Millis) -> String {
     let s = ms / 1000;
     if s >= 3600 {

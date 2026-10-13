@@ -9,6 +9,12 @@ use crate::{
 use anyhow::Result;
 
 pub enum Command {
+    Sync(crate::sync::Request),
+    SyncRefresh,
+    SyncFinished(String),
+    SyncFingerprints(Vec<crate::sync::Fingerprint>, bool),
+    SyncIncoming(Vec<crate::sync::Record>, Vec<crate::sync::RateRecord>),
+    SyncStatus(crate::sync::Status),
     #[cfg(all(target_os = "android", feature = "android-playback-tests"))]
     PlaybackTest(
         serde_json::Value,
@@ -62,6 +68,8 @@ pub enum Command {
     Quit,
 }
 pub enum Event {
+    SyncIndexing(bool),
+    SyncStatus(crate::sync::Status),
     #[cfg(target_os = "android")]
     AndroidRefresh,
     #[cfg(target_os = "android")]
