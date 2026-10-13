@@ -49,7 +49,7 @@ def inspect(path):
         bcrypt.dll bcryptprimitives.dll ole32.dll oleaut32.dll combase.dll
         comctl32.dll shell32.dll shlwapi.dll uxtheme.dll uiautomationcore.dll
         dwrite.dll dwmapi.dll mfplat.dll mfreadwrite.dll propsys.dll opengl32.dll
-        imm32.dll xaudio2_9.dll crypt32.dll ws2_32.dll userenv.dll secur32.dll
+        imm32.dll xaudio2_9.dll crypt32.dll ws2_32.dll iphlpapi.dll userenv.dll secur32.dll
         version.dll winmm.dll winspool.drv msvcrt.dll ucrtbase.dll""".split())
     external = sorted(name for name in imported if name not in system
                       and not name.startswith(("api-ms-win-", "ext-ms-win-")))
