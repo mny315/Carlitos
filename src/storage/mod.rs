@@ -23,6 +23,12 @@ pub struct Draft {
     pub include: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct ImportFolder {
+    pub uri: String,
+    pub files: Vec<(String, String)>,
+}
+
 impl Store {
     pub fn load(&self) -> Result<Library> {
         // A background relocation can commit between SELECTs. Keep every
@@ -31,7 +37,7 @@ impl Store {
         let mut lib = Library::default();
         let mut stmt = self
             .conn
-            .prepare("SELECT id,uri FROM sources WHERE kind='book' ORDER BY id")?;
+            .prepare("SELECT id,uri FROM sources WHERE kind IN ('book','folder') ORDER BY id")?;
         lib.sources = stmt
             .query_map([], |r| {
                 Ok(Source {
@@ -40,12 +46,17 @@ impl Store {
                 })
             })?
             .collect::<Result<_, _>>()?;
+        lib.folder_sources = self
+            .conn
+            .prepare("SELECT id FROM sources WHERE kind='folder'")?
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
         lib.source_files = self
             .conn
             .prepare("SELECT source_id,file_id FROM source_files")?
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;
-        let mut stmt = self.conn.prepare("SELECT id,source_id,uri,relative,identity,size,modified,data FROM media_files WHERE id IN (SELECT file_id FROM book_parts) OR id IN (SELECT sf.file_id FROM source_files sf JOIN sources s ON sf.source_id=s.id WHERE s.kind='book') ORDER BY id")?;
+        let mut stmt = self.conn.prepare("SELECT id,source_id,uri,relative,identity,size,modified,data FROM media_files WHERE id IN (SELECT file_id FROM book_parts) OR id IN (SELECT sf.file_id FROM source_files sf JOIN sources s ON sf.source_id=s.id WHERE s.kind IN ('book','folder')) ORDER BY id")?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, i64>(0)?,

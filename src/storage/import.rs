@@ -12,7 +12,20 @@ use rusqlite::{OptionalExtension, params};
 impl Store {
     /// An entire confirmed preview is committed together. Existing parts retain IDs, order and progress.
     pub fn import(&mut self, drafts: Vec<Draft>) -> Result<Library> {
+        self.import_folders(drafts, vec![])
+    }
+
+    pub fn import_folders(
+        &mut self,
+        drafts: Vec<Draft>,
+        folders: Vec<super::ImportFolder>,
+    ) -> Result<Library> {
         documents::validate_paths(&drafts)?;
+        let included: std::collections::HashSet<_> = drafts
+            .iter()
+            .filter(|draft| draft.include)
+            .flat_map(|draft| draft.files.iter().map(|file| file.uri.clone()))
+            .collect();
         let tx = self.conn.transaction()?;
         split_combined_books(&tx, &drafts)?;
         let mut refresh_covers = std::collections::BTreeSet::new();
@@ -189,6 +202,20 @@ impl Store {
                         ordinal += 1;
                     }
                 }
+            }
+        }
+        for folder in folders {
+            let files: Vec<_> = folder
+                .files
+                .into_iter()
+                .filter(|(uri, _)| included.contains(uri))
+                .collect();
+            if files.is_empty() {
+                continue;
+            }
+            let source = super::sources::ensure_folder(&tx, &folder.uri)?;
+            for (uri, relative) in files {
+                tx.execute("INSERT INTO source_files(source_id,file_id,relative) SELECT ?1,id,?2 FROM media_files WHERE uri=?3 ON CONFLICT(source_id,file_id) DO UPDATE SET relative=excluded.relative", params![source, relative, uri])?;
             }
         }
         // Wait for every file to refresh before choosing the first surviving

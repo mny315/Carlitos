@@ -143,6 +143,11 @@ export component AppDialog inherits Rectangle {
             }
             if root.dialog-kind == 5: Label { text: Theme.t("Найдём новые книги и обновим сведения. Если папка перемещена, выберите её новое расположение — прогресс сохранится.", "Find new books and refresh their details. If the folder moved, choose its new location — listening progress is kept."); wrap: word-wrap; color: Theme.muted; }
             if root.dialog-kind == 5 && State.source-error != "": Label { text: State.source-error; wrap: word-wrap; color: Theme.danger; font-size: (12px) * Theme.font-scale; }
+            if root.dialog-kind == 5: Action {
+                text: Theme.t("Убрать папку из библиотеки", "Remove folder from library");
+                icon: @image-url("../icons/trash.svg"); destructive: true; quiet: true; enabled: !State.source-busy;
+                clicked => { State.remove-key = State.relocate-key; State.remove-kind = "source"; State.overlay = 1; }
+            }
             if root.dialog-kind == 4: Label { text: Theme.t("Сейчас нет панели, из которой можно вернуть окно.", "There is no tray host to bring the window back."); wrap: word-wrap; color: Theme.muted; }
             if !root.popup-menu: HorizontalLayout { spacing: 8px; alignment: root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6) ? stretch : end;
                 // Android keeps preedit outside edit-title until Action takes

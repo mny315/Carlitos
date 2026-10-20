@@ -4,6 +4,21 @@ use std::cmp::Ordering;
 impl Library {
     /// Include nested folders and overlapping imports, counting each book once.
     pub fn source_book_counts(&self) -> std::collections::HashMap<Id, usize> {
+        let books = self.source_books();
+        self.sources
+            .iter()
+            .map(|source| {
+                (
+                    source.id,
+                    books
+                        .get(&source.id)
+                        .map_or(0, std::collections::HashSet::len),
+                )
+            })
+            .collect()
+    }
+
+    pub fn source_books(&self) -> std::collections::HashMap<Id, std::collections::HashSet<Id>> {
         use std::collections::{HashMap, HashSet};
         let paths: HashMap<_, _> = self
             .sources
@@ -55,10 +70,7 @@ impl Library {
                 include(part.book_id, path);
             }
         }
-        self.sources
-            .iter()
-            .map(|s| (s.id, members.get(&s.id).map_or(0, HashSet::len)))
-            .collect()
+        members
     }
     pub fn book_tags(&self) -> std::collections::HashMap<Id, BookTags> {
         let files: std::collections::HashMap<_, _> = self.media.iter().map(|m| (m.id, m)).collect();

@@ -1,0 +1,60 @@
+import { ListView } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "../components/theme.slint";
+import { Action, Label, Toggle } from "../components/controls.slint";
+import { SourceEntry } from "../components/source-entry.slint";
+
+export component SourcesPage inherits VerticalLayout {
+    spacing: State.compact ? 10px : 16px;
+    padding-top: State.android ? 12px : 0px;
+    HorizontalLayout { spacing: 8px;
+        VerticalLayout { spacing: 4px;
+            Label { text: Theme.t("Источники", "Sources"); font-size: (State.compact ? 26px : 30px) * Theme.font-scale; font-weight: 650; }
+            if !State.compact: Label { text: Theme.t("Ваши папки с аудиокнигами", "Your audiobook folders"); color: Theme.muted; }
+        }
+        Action {
+            text: State.compact ? "" : State.source-selection ? Theme.t("Отмена", "Cancel") : Theme.t("Выбрать", "Select");
+            icon: State.source-selection ? @image-url("../icons/close.svg") : @image-url("../icons/check.svg");
+            accessible-label: State.source-selection ? Theme.t("Отменить выбор папок", "Cancel folder selection") : Theme.t("Выбрать папки", "Select folders");
+            quiet: true; enabled: State.source-folder-count > 0;
+            clicked => { State.action(State.source-selection ? "clear-source-selection" : "select-sources", ""); }
+        }
+        if !State.source-selection: Action {
+            text: State.compact ? "" : Theme.t("Добавить файл", "Add a file");
+            icon: @image-url("../icons/book.svg");
+            accessible-label: Theme.t("Добавить аудиофайл", "Add an audio file");
+            enabled: !State.picker-busy && !State.source-busy;
+            clicked => { State.add-file(); }
+        }
+        Action {
+            text: State.compact ? "" : State.source-selection ? Theme.t("Удалить выбранные", "Remove selected") : Theme.t("Добавить папку", "Add a folder");
+            icon: State.source-selection ? @image-url("../icons/trash.svg") : @image-url("../icons/plus.svg");
+            accessible-label: State.source-selection ? Theme.t("Удалить выбранные папки", "Remove selected folders") : Theme.t("Добавить папку", "Add a folder");
+            primary: !State.source-selection; destructive: State.source-selection;
+            enabled: !State.source-selection || (State.selected-source-count > 0 && !State.source-busy);
+            clicked => {
+                if (State.source-selection) { State.action("confirm-remove-sources", ""); }
+                else { State.navigate(2); }
+            }
+        }
+    }
+    if State.source-selection: HorizontalLayout { spacing: 8px;
+        Toggle {
+            text: Theme.t("Выбрать все", "Select all");
+            checked: State.source-folder-count > 0 && State.selected-source-count == State.source-folder-count;
+            toggled => { State.action(self.checked ? "select-all-sources" : "deselect-sources", ""); }
+        }
+        Label { text: Theme.t("Выбрано: ", "Selected: ") + State.selected-source-count; color: Theme.muted; horizontal-alignment: right; }
+    }
+    Rectangle {
+        vertical-stretch: 1;
+        if State.sources.length == 0: VerticalLayout { alignment: center; spacing: 12px;
+            Image { source: @image-url("../icons/folder.svg"); colorize: Theme.muted; height: 40px; }
+            Label { text: Theme.t("Добавьте папку с аудиокнигами", "Add a folder of audiobooks"); horizontal-alignment: center; wrap: word-wrap; color: Theme.muted; }
+        }
+        ListView {
+            width: parent.width; height: parent.height;
+            for source in State.sources: SourceEntry { source: source; }
+        }
+    }
+}

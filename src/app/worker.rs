@@ -74,6 +74,7 @@ impl Handle {
                     scan_source: None,
                     scans: vec![],
                     drafts: vec![],
+                    import_folders: vec![],
                     issues: vec![],
                     checkpoint: Instant::now(),
                     options,

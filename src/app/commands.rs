@@ -71,6 +71,7 @@ impl Controller {
                         | RemoveSources(_)
                         | Relocate(..)
                         | Rescan(_)
+                        | UpdateFolder(..)
                         | Scan(..)
                         | Import
                 ))
@@ -92,6 +93,7 @@ impl Controller {
                         | RemoveSources(_)
                         | ResetProgress(_)
                         | Relocate(..)
+                        | UpdateFolder(..)
                         | Import
                 ))
         {
@@ -263,11 +265,32 @@ impl Controller {
                     .iter()
                     .find(|s| s.id == id)
                     .context("Source not found")?;
-                let single = crate::source::document_identity(&source.uri).is_some()
-                    && self.library.books.iter().any(|book| book.source_id == id);
+                let document = crate::source::document_identity(&source.uri);
+                let single = document.is_some()
+                    && self.library.books.iter().any(|book| {
+                        self.library.sources.iter().any(|candidate| {
+                            candidate.id == book.source_id
+                                && crate::source::document_identity(&candidate.uri) == document
+                        })
+                    });
                 self.scan(crate::source::Location::uri(&source.uri)?, single)?;
                 self.scan_source = Some(id);
                 let _ = self.events.try_send(Event::SourceUpdating(true));
+            }
+            UpdateFolder(root, replacement) => {
+                self.save()?;
+                let uri = match &root {
+                    crate::source::Location::File(path) => crate::library::file_uri(path)?,
+                    crate::source::Location::Document(uri) => uri.clone(),
+                };
+                let id = self.store()?.ensure_folder(&uri)?;
+                let library = self.store()?.load()?;
+                self.reconcile(library);
+                if let Some(path) = replacement {
+                    self.handle(Relocate(id, path))?;
+                } else {
+                    self.handle(Rescan(id))?;
+                }
             }
             Scan(path, single) => self.scan(path, single)?,
             CancelScan => {
@@ -277,6 +300,7 @@ impl Controller {
                 }
                 self.scan_generation += 1;
                 self.drafts.clear();
+                self.import_folders.clear();
                 self.issues.clear();
                 self.emit_drafts();
                 let _ = self

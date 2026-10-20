@@ -20,14 +20,16 @@ pub(super) fn scan(uri: &str, mode: ImportMode, control: ScanControl) -> Result<
                 include: true,
             }],
             issues: vec![],
+            folders: vec![],
         });
     }
     let mut result = ScanResult {
         drafts: vec![],
         issues: vec![],
+        folders: vec![],
     };
     let mut dirs = BTreeMap::from([(PathBuf::new(), root.clone())]);
-    let mut stack = vec![(PathBuf::new(), root)];
+    let mut stack = vec![(PathBuf::new(), root.clone())];
     let mut visited = HashSet::new();
     let mut files = Vec::new();
     let mut covers = BTreeMap::<PathBuf, Document>::new();
@@ -74,6 +76,13 @@ pub(super) fn scan(uri: &str, mode: ImportMode, control: ScanControl) -> Result<
             }
         }
     }
+    result.folders.push(crate::storage::ImportFolder {
+        uri: root.uri,
+        files: files
+            .iter()
+            .map(|(path, doc)| (doc.uri.clone(), path.to_string_lossy().into_owned()))
+            .collect(),
+    });
     let mut groups = BTreeMap::<PathBuf, Vec<(PathBuf, Document)>>::new();
     for (path, doc) in files {
         let group = if mode == ImportMode::Book {

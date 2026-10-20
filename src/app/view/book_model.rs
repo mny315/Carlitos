@@ -61,18 +61,31 @@ impl BookModel {
         if same_order {
             for (old, new) in previous.iter().zip(&mut rows) {
                 new.0.move_offset = old.0.move_offset;
+                new.0.move_offset_x = old.0.move_offset_x;
             }
         } else if animate {
             // Continue from the painted positions if another book was started
-            // before the previous movement finished. Offsets use row heights.
+            // before the previous movement finished. Offsets use grid cells.
             let remaining = 1. - state.get_books_move_progress();
+            let columns = state.get_book_columns().max(1) as usize;
             let positions: std::collections::HashMap<_, _> = previous
                 .iter()
                 .enumerate()
-                .map(|(i, (book, _))| (book.key.clone(), i as f32 + book.move_offset * remaining))
+                .map(|(i, (book, _))| {
+                    (
+                        book.key.clone(),
+                        (
+                            (i % columns) as f32 + book.move_offset_x * remaining,
+                            (i / columns) as f32 + book.move_offset * remaining,
+                        ),
+                    )
+                })
                 .collect();
             for (i, (book, _)) in rows.iter_mut().enumerate() {
-                book.move_offset = positions.get(&book.key).map_or(0., |old| old - i as f32);
+                if let Some((x, y)) = positions.get(&book.key) {
+                    book.move_offset_x = x - (i % columns) as f32;
+                    book.move_offset = y - (i / columns) as f32;
+                }
             }
         }
         let changed: Vec<_> = if same_order {
@@ -110,6 +123,7 @@ impl BookModel {
             .position(|(b, _)| b.key == item.key);
         if let Some(index) = index {
             item.move_offset = self.rows.borrow()[index].0.move_offset;
+            item.move_offset_x = self.rows.borrow()[index].0.move_offset_x;
             self.rows.borrow_mut()[index].0 = item;
             self.notify.row_changed(index);
         }

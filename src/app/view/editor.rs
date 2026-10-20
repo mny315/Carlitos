@@ -96,26 +96,6 @@ impl View {
         state.set_overlay(2);
     }
 
-    pub(super) fn begin_source_edit(&self, id: Option<Id>) {
-        let Some(window) = self.window.upgrade() else {
-            return;
-        };
-        let Some(source) = self.library.sources.iter().find(|s| Some(s.id) == id) else {
-            return;
-        };
-        let state = window.global::<State>();
-        renew_picker_owner(&window);
-        state.set_relocate_key(source.id.to_string().into());
-        state.set_relocate_path(
-            crate::library::local_path(&source.uri)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| source.uri.clone())
-                .into(),
-        );
-        state.set_source_error("".into());
-        state.set_overlay(5);
-    }
-
     #[cfg(target_os = "android")]
     pub(crate) fn save_editor(&self) -> Option<SavedEditor> {
         let window = self.window.upgrade()?;

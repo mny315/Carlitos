@@ -3,12 +3,15 @@ use anyhow::Context;
 
 pub fn scan(paths: Vec<PathBuf>, mode: ImportMode, control: ScanControl) -> Result<ScanResult> {
     let discoverer = discoverer()?;
+    let single_input = paths.len() == 1;
     let mut result = ScanResult {
         drafts: vec![],
         issues: vec![],
+        folders: vec![],
     };
     for path in paths {
         control.check()?;
+        let first_draft = result.drafts.len();
         let mut files = vec![];
         let root = if path.is_dir() {
             let path = dunce::canonicalize(&path)?;
@@ -40,6 +43,23 @@ pub fn scan(paths: Vec<PathBuf>, mode: ImportMode, control: ScanControl) -> Resu
             );
             root
         };
+        let folder = crate::storage::ImportFolder {
+            uri: file_uri(&root)?,
+            files: files
+                .iter()
+                .filter(|file| is_audio(file))
+                .filter_map(|file| {
+                    Some((
+                        file_uri(file).ok()?,
+                        file.strip_prefix(&root)
+                            .ok()?
+                            .to_string_lossy()
+                            .into_owned(),
+                    ))
+                })
+                .collect(),
+        };
+        result.folders.push(folder);
         if mode == ImportMode::Books {
             let mut groups = std::collections::BTreeMap::<PathBuf, Vec<PathBuf>>::new();
             for file in files.into_iter().filter(|p| is_audio(p)) {
@@ -73,6 +93,17 @@ pub fn scan(paths: Vec<PathBuf>, mode: ImportMode, control: ScanControl) -> Resu
             }
         } else {
             add_draft(&root, files, &discoverer, &control, &mut result)?;
+        }
+        if single_input && !path.is_dir() {
+            for draft in &mut result.drafts[first_draft..] {
+                if let [file] = draft.files.as_mut_slice() {
+                    draft.root_uri = file.uri.clone();
+                    file.relative.clear();
+                    if file.album.is_empty() {
+                        draft.title = file.title.clone();
+                    }
+                }
+            }
         }
     }
     control.check()?;

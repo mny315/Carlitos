@@ -1,0 +1,144 @@
+import { State, SourceItem } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action, Label, Toggle } from "controls.slint";
+
+component SourceCaption inherits Rectangle {
+    in property <SourceItem> source;
+    in property <length> leading-space;
+    in property <length> text-width;
+    out property <bool> highlighted: caption-focus.has-focus || caption-touch.has-hover;
+    accessible-role: button;
+    accessible-label: source.title + " · " + source.detail;
+    accessible-action-default => { root.activate(); }
+    function activate() {
+        State.action(source.child ? "open-book" : State.source-selection ? "select-source" : "toggle-source", source.child ? source.book-key : source.key);
+    }
+    caption-focus := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") { root.activate(); return accept; }
+            return reject;
+        }
+    }
+    caption-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { caption-focus.focus(); Theme.haptic("button"); root.activate(); }
+    }
+    VerticalLayout {
+        x: root.leading-space; y: 6px; width: root.text-width; height: parent.height - 12px;
+        padding: 4px; spacing: 3px; alignment: center;
+        Label { text: root.source.title; font-weight: root.source.child ? 400 : 600; }
+        if !root.source.child || root.source.detail != "": Label {
+            text: root.source.child ? root.source.detail : State.source-busy && State.source-update-path == root.source.path ? Theme.t("Обновляем список книг…", "Refreshing books…") : (State.compact ? root.source.detail + " · " : "") + root.source.path;
+            color: !root.source.child && State.source-busy && State.source-update-path == root.source.path ? Theme.accent : Theme.muted;
+            font-size: 12px * Theme.font-scale;
+        }
+    }
+}
+
+export component SourceEntry inherits Rectangle {
+    in property <SourceItem> source;
+    private property <length> row-height: max(source.child ? 54px : 68px, Theme.body * 2 + 24px);
+    private property <length> action-width: State.android ? 48px : 44px;
+    private property <bool> ready;
+    private property <bool> row-open: !source.child || source.expanded;
+    private property <float> reveal: 1;
+    changed row-open => { root.reveal = root.row-open ? 1 : 0; }
+    init => {
+        root.reveal = root.source.child && (root.source.animating || !root.source.expanded) ? 0 : 1;
+        root.ready = true;
+        if (root.row-open) { root.reveal = 1; }
+    }
+    animate reveal { duration: root.ready ? Theme.page-motion : 0ms; easing: ease-out; }
+    height: row-height * (source.child ? reveal : 1) + (source.child ? 0px : 8px);
+    clip: source.child;
+    FocusScope {
+        width: parent.width; height: root.row-height;
+        enabled: root.row-open;
+        y: root.source.child ? (1 - root.reveal) * -4px : 0px;
+        opacity: root.source.child ? root.reveal : 1;
+        Rectangle {
+            width: parent.width; height: parent.height;
+            background: root.source.child ? transparent : root.source.selected || caption.highlighted ? Theme.tint : Theme.surface;
+            border-radius: 10px;
+            border-width: root.source.child ? 0px : 1px;
+            border-color: root.source.expanded && !root.source.child ? Theme.line.mix(Theme.accent, 70%) : Theme.line;
+            animate background, border-color { duration: Theme.control-motion; }
+            if root.source.child: Rectangle {
+                x: 48px; width: parent.width - 48px; height: parent.height; border-radius: 6px;
+                background: caption.highlighted ? Theme.tint : transparent;
+                animate background { duration: Theme.control-motion; }
+            }
+            caption := SourceCaption {
+                source: root.source;
+                x: root.source.child ? 48px : 0px;
+                height: parent.height;
+                width: max(0px, parent.width - self.x - (!root.source.child && !State.source-selection ? root.action-width * 2 + 12px : 0px));
+                leading-space: root.source.child ? 36px : State.compact ? 16px + root.action-width : 56px + root.action-width;
+                text-width: !root.source.child && !State.compact ? max(0px, count-badge.x - self.leading-space - 12px) : self.width - self.leading-space - 8px;
+            }
+            count-badge := Rectangle {
+                visible: !root.source.child && !State.compact;
+                width: count.preferred-width + 18px; height: max(22px, 11px * Theme.font-scale + 10px);
+                x: parent.width - self.width - (State.source-selection ? 12px : root.action-width * 2 + 24px);
+                y: (parent.height - self.height) / 2;
+                border-radius: self.height / 2; background: Theme.raised;
+                count := Label { text: root.source.detail; font-size: 11px * Theme.font-scale; color: Theme.muted; horizontal-alignment: center; }
+            }
+            if root.source.child: Rectangle { x: 30px; width: 1px; height: parent.height; background: Theme.line; }
+            if root.source.child: Rectangle { x: 30px; y: parent.height / 2; width: 18px; height: 1px; background: Theme.line; }
+            if !root.source.child && State.source-selection: Toggle {
+                x: 8px; y: (parent.height - self.height) / 2; width: root.action-width;
+                checked: root.source.selected;
+                accessible-label: Theme.t("Выбрать папку: ", "Select folder: ") + root.source.title;
+                toggled => { State.action("select-source", root.source.key); }
+            }
+            if !root.source.child && !State.source-selection: Rectangle {
+                x: 8px; y: (parent.height - self.height) / 2; width: root.action-width; height: Theme.action-height;
+                background: Theme.surface; border-radius: 9px;
+            }
+            if !root.source.child && !State.source-selection: Action {
+                x: 8px; y: (parent.height - self.height) / 2; width: root.action-width;
+                icon: @image-url("../icons/down.svg"); quiet: true;
+                icon-rotation: root.source.expanded ? 0deg : -90deg;
+                animate icon-rotation { duration: Theme.page-motion; easing: ease-out; }
+                accessible-label: (root.source.expanded ? Theme.t("Свернуть папку: ", "Collapse folder: ") : Theme.t("Раскрыть папку: ", "Expand folder: ")) + root.source.title;
+                clicked => { State.action("toggle-source", root.source.key); }
+            }
+            if root.source.child || !State.compact: Rectangle {
+                x: root.source.child ? 48px : 16px + root.action-width;
+                y: (parent.height - self.height) / 2;
+                width: 32px; height: 32px; border-radius: 8px;
+                background: root.source.child ? transparent : Theme.raised;
+                Image {
+                    source: root.source.child ? @image-url("../icons/book.svg") : @image-url("../icons/folder.svg");
+                    colorize: root.source.child ? Theme.muted : Theme.accent;
+                    x: 6px; y: 6px; width: 20px; height: 20px;
+                }
+            }
+            if !root.source.child && !State.source-selection: Rectangle {
+                x: parent.width - root.action-width * 2 - 12px; y: (parent.height - self.height) / 2;
+                width: root.action-width; height: Theme.action-height;
+                background: Theme.surface; border-radius: 9px;
+            }
+            if !root.source.child && !State.source-selection: Action {
+                x: parent.width - root.action-width * 2 - 12px; y: (parent.height - self.height) / 2; width: root.action-width;
+                icon: @image-url("../icons/refresh.svg"); quiet: true;
+                spinning: State.source-busy && State.source-update-path == root.source.path;
+                enabled: !State.source-busy && !State.scanning;
+                accessible-label: Theme.t("Обновить книги в папке: ", "Refresh books in folder: ") + root.source.title;
+                clicked => { State.action("rescan", root.source.key); }
+            }
+            if !root.source.child && !State.source-selection: Rectangle {
+                x: parent.width - root.action-width - 8px; y: (parent.height - self.height) / 2;
+                width: root.action-width; height: Theme.action-height;
+                background: Theme.surface; border-radius: 9px;
+            }
+            if !root.source.child && !State.source-selection: Action {
+                x: parent.width - root.action-width - 8px; y: (parent.height - self.height) / 2; width: root.action-width;
+                icon: @image-url("../icons/more.svg"); quiet: true; enabled: !State.source-busy;
+                accessible-label: Theme.t("Настройки папки: ", "Folder settings: ") + root.source.title;
+                clicked => { State.action("begin-source-edit", root.source.key); }
+            }
+        }
+    }
+}

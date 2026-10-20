@@ -51,6 +51,7 @@ pub enum Command {
     RemoveSources(Vec<Id>),
     Relocate(Id, Location),
     Rescan(Id),
+    UpdateFolder(Location, Option<Location>),
     Scan(Location, bool),
     CancelScan,
     ScanDone(u64, Result<ScanResult>),

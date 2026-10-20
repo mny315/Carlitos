@@ -52,10 +52,13 @@ sys.excepthook = report_error
 cases = [
     ("library-dark", "1000x700", "dark", "ru", []),
     ("library-light", "1000x700", "light", "en", []),
+    ("library-two-columns", "1366x768", "dark", "ru", []),
+    ("library-two-columns-light", "1920x1080", "light", "en", []),
     ("library-narrow", "360x480", "dark", "ru", []),
     ("book-dark", "1000x700", "dark", "ru", ["--open-book", "1"]),
     ("book-narrow", "360x480", "light", "en", ["--open-book", "1"]),
     ("interaction-wide", "1000x700", "dark", "ru", ["--self-test"]),
+    ("interaction-two-columns", "1366x768", "dark", "ru", ["--self-test"]),
     ("interaction-narrow", "360x480", "light", "ru", ["--self-test"]),
     ("cover-theme-dark", "1000x700", "dark", "ru", ["--test-cover-theme"]),
     ("cover-theme-light", "360x480", "light", "ru", ["--test-cover-theme"]),

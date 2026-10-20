@@ -98,6 +98,7 @@ impl View {
             started: progress.is_some(),
             completed,
             move_offset: 0.,
+            move_offset_x: 0.,
         }
     }
     pub(super) fn book_item(&self, id: Id) -> Option<BookItem> {

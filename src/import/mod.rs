@@ -54,6 +54,7 @@ impl ScanControl {
 pub struct ScanResult {
     pub drafts: Vec<Draft>,
     pub issues: Vec<String>,
+    pub folders: Vec<crate::storage::ImportFolder>,
 }
 pub fn identity(path: &Path) -> Result<String> {
     crate::platform::identity(path)

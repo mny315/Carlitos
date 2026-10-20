@@ -239,6 +239,7 @@ fn import_cancellation_and_stale_scan_cannot_commit() -> Result<()> {
         Ok(ScanResult {
             drafts: vec![],
             issues: vec!["stale".into()],
+            folders: vec![],
         }),
     ))?;
     quit(&mut app)?;

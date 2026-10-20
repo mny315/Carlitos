@@ -58,7 +58,13 @@ fn first_library_menu(window: &AppWindow) {
         .to_logical(window.window().scale_factor());
     click(
         window,
-        size.width - if state.get_compact() { 44. } else { 116. },
+        if state.get_compact() {
+            size.width - 44.
+        } else {
+            218. + (size.width - 246. - (state.get_book_columns() - 1) as f32 * 24.)
+                / state.get_book_columns() as f32
+                - 88.
+        },
         if state.get_compact() { 244. } else { 306. },
     );
 }

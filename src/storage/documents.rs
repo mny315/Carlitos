@@ -76,7 +76,13 @@ impl Store {
             let Some(prefixes) = prefixes else {
                 continue;
             };
-            if prefixes[0].is_empty() || prefixes.iter().any(|p| p != &prefixes[0]) {
+            if prefixes.iter().any(|p| p != &prefixes[0]) {
+                continue;
+            }
+            if prefixes[0].is_empty() {
+                if document_identity(&candidate.uri).as_ref() == Some(&original_identity) {
+                    sources.insert(candidate.id, root.uri.clone());
+                }
                 continue;
             }
             let moved = documents::relative(&root.uri, prefixes[0])?;

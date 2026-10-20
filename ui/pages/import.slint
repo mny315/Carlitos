@@ -4,10 +4,10 @@ import { Theme } from "../components/theme.slint";
 import { Action, Label, Field, Toggle, BusyStatus } from "../components/controls.slint";
 component ImportSetup inherits VerticalLayout {
     spacing: 12px;
-    Label { text: Theme.t("Выберите папку и проверьте состав перед импортом", "Choose a folder, then review its contents"); color: Theme.muted; wrap: word-wrap; }
+    Label { text: Theme.t("Выберите папку или аудиофайл", "Choose a folder or an audio file"); color: Theme.muted; wrap: word-wrap; }
     if State.android: Action { text: State.import-folder-label; icon: @image-url("../icons/folder.svg"); fill: true; enabled: !State.picker-busy; clicked => { State.choose-folder(); } }
-    if !State.android: HorizontalLayout { spacing: 8px; Field { text <=> State.import-path; placeholder: Theme.t("Путь к папке", "Folder path"); horizontal-stretch: 1; } Action { icon: @image-url("../icons/folder.svg"); accessible-label: Theme.t("Выбрать папку", "Choose folder"); enabled: !State.picker-busy; clicked => { State.choose-folder(); } } }
-    Toggle { text: Theme.t("Объединить папку в одну книгу", "Treat this folder as one book"); checked <=> State.single-book; }
+    if !State.android: HorizontalLayout { spacing: 8px; Field { text <=> State.import-path; placeholder: Theme.t("Путь к папке или аудиофайлу", "Folder or audio file path"); horizontal-stretch: 1; } Action { icon: @image-url("../icons/folder.svg"); accessible-label: Theme.t("Выбрать папку", "Choose folder"); enabled: !State.picker-busy; clicked => { State.choose-folder(); } } }
+    if !State.import-file: Toggle { text: Theme.t("Объединить папку в одну книгу", "Treat this folder as one book"); checked <=> State.single-book; }
     HorizontalLayout { spacing: 8px;
         Action { text: State.scanning ? Theme.t("Отменить", "Cancel") : Theme.t("Найти книги", "Find books"); primary: !State.scanning; clicked => { State.action(State.scanning ? "cancel-scan" : "scan", State.import-path); } }
         if State.scanning: BusyStatus { text: State.scan-status; }
@@ -17,31 +17,94 @@ component ImportSetup inherits VerticalLayout {
 }
 export component ImportPage inherits VerticalLayout {
     spacing: 8px;
-    HorizontalLayout { Label { text: Theme.t("Добавить книги", "Add books"); font-size: (26px) * Theme.font-scale; font-weight: 650; } Action { icon: @image-url("../icons/close.svg"); quiet: true; accessible-label: Theme.t("Закрыть импорт", "Close import"); clicked => { State.action("cancel-scan", ""); State.navigate(0); } } }
-    if State.android && State.drafts.length == 0: HorizontalLayout {
+    HorizontalLayout {
+        Label { text: Theme.t("Добавить книги", "Add books"); font-size: (26px) * Theme.font-scale; font-weight: 650; }
+        if State.drafts.length > 0 && State.selected-draft < 0: Action {
+            icon: State.import-file ? @image-url("../icons/book.svg") : @image-url("../icons/folder.svg"); quiet: true; enabled: !State.picker-busy;
+            accessible-label: State.import-file ? Theme.t("Другой файл", "Choose another file") : Theme.t("Другая папка", "Choose another folder");
+            clicked => { State.action("cancel-scan", ""); if (State.import-file) { State.add-file(); } else { State.choose-folder(); } }
+        }
+        Action { icon: @image-url("../icons/close.svg"); quiet: true; accessible-label: Theme.t("Закрыть импорт", "Close import"); clicked => { State.action("cancel-scan", ""); State.navigate(0); } }
+    }
+    if State.drafts.length == 0: HorizontalLayout {
         alignment: start;
-        Action { text: Theme.t("Выбрать файл", "Choose file"); clicked => { State.action("pick-file", ""); } }
+        Action { text: Theme.t("Выбрать файл", "Choose file"); icon: @image-url("../icons/book.svg"); enabled: !State.picker-busy && !State.scanning; clicked => { State.add-file(); } }
     }
     if State.drafts.length == 0: ScrollView { ImportSetup { padding-right: 8px; } }
-    if State.drafts.length > 0 && State.selected-draft < 0: HorizontalLayout { spacing: 8px;
-        Action { icon: @image-url("../icons/back.svg"); accessible-label: Theme.t("Другая папка", "Choose another folder"); clicked => { State.action("cancel-scan", ""); } }
-        Label { text: State.import-folder-label; color: Theme.muted; }
-        Action { text: Theme.t("Добавить", "Import"); primary: true; enabled: !State.scanning; clicked => { State.action("import", ""); } }
+    if State.drafts.length > 0 && State.selected-draft < 0: Rectangle {
+        height: max(72px, Theme.body * 2 + 28px); background: Theme.surface; border-radius: 10px;
+        border-width: 1px; border-color: Theme.line;
+        Action {
+            x: 8px; y: (parent.height - self.height) / 2; width: State.android ? 48px : 44px;
+            icon: @image-url("../icons/down.svg"); quiet: true;
+            icon-rotation: State.import-expanded ? 0deg : -90deg;
+            animate icon-rotation { duration: Theme.page-motion; easing: ease-out; }
+            accessible-label: State.import-expanded ? Theme.t("Свернуть список книг", "Collapse book list") : Theme.t("Показать найденные книги", "Show discovered books");
+            clicked => { State.import-expanded = !State.import-expanded; }
+        }
+        if !State.compact: Rectangle {
+            x: 60px; y: (parent.height - self.height) / 2; width: 32px; height: 32px;
+            border-radius: 8px; background: Theme.raised;
+            Image { x: 6px; y: 6px; width: 20px; height: 20px; source: State.import-file ? @image-url("../icons/book.svg") : @image-url("../icons/folder.svg"); colorize: Theme.accent; }
+        }
+        Rectangle {
+            x: State.compact ? 60px : 100px; y: 6px; height: parent.height - 12px; width: max(0px, import-actions.x - self.x - 8px);
+            background: import-touch.has-hover || import-focus.has-focus ? Theme.tint : transparent;
+            animate background { duration: Theme.control-motion; }
+            border-radius: 6px;
+            accessible-role: button; accessible-label: State.import-folder-title + " · " + State.import-summary;
+            accessible-action-default => { State.import-expanded = !State.import-expanded; }
+            import-focus := FocusScope {
+                key-pressed(event) => {
+                    if (event.text == Key.Return || event.text == " ") { State.import-expanded = !State.import-expanded; return accept; }
+                    return reject;
+                }
+            }
+            import-touch := TouchArea { mouse-cursor: pointer; clicked => { import-focus.focus(); Theme.haptic("button"); State.import-expanded = !State.import-expanded; } }
+            VerticalLayout { padding: 4px; spacing: 3px; alignment: center;
+                Label { text: State.import-folder-title; font-weight: 600; }
+                Label { text: State.import-summary; color: Theme.muted; font-size: 12px * Theme.font-scale; }
+            }
+        }
+        import-actions := HorizontalLayout {
+            width: self.preferred-width; height: Theme.action-height;
+            x: parent.width - self.width - 8px; y: (parent.height - self.height) / 2;
+            spacing: 6px;
+            Action {
+                icon: @image-url("../icons/refresh.svg"); quiet: true; enabled: !State.scanning;
+                accessible-label: Theme.t("Пересканировать папку", "Scan folder again");
+                clicked => { State.action("scan", State.import-path); }
+            }
+            Action { text: Theme.t("Добавить", "Import"); primary: true; enabled: !State.scanning && State.included-drafts > 0; clicked => { State.action("import", ""); } }
+        }
     }
     if State.import-issues != "": ScrollView { height: min(64px, issue.preferred-height + 8px); issue := Label { text: State.import-issues; color: Theme.danger; wrap: word-wrap; } }
-    if State.drafts.length > 0 && State.selected-draft < 0: ListView {
+    if State.drafts.length > 0 && State.selected-draft < 0: Rectangle {
+      private property <float> reveal: State.import-expanded ? 1 : 0;
+      animate reveal { duration: Theme.page-motion; easing: ease-out; }
+      vertical-stretch: 1; clip: true;
+      if State.import-expanded || self.reveal > 0: Rectangle {
+       width: parent.width; height: parent.height * parent.reveal; clip: true; opacity: parent.reveal;
+       FocusScope {
+        enabled: State.import-expanded; width: parent.width; height: parent.height;
+        ListView {
+        width: parent.width; height: parent.height;
         for draft[idx] in State.drafts: Rectangle {
-            height: max(96px, Theme.body * 3 + 36px); background: Theme.surface; border-radius: 8px;
+            height: max(64px, Theme.body * 2 + 24px); border-radius: 8px;
             HorizontalLayout { padding: 10px; spacing: 8px;
                 Toggle { width: State.android ? 48px : 32px; accessible-label: draft.title; checked: draft.included; toggled => { State.draft-changed(idx, draft.title, draft.author, self.checked); } }
                 VerticalLayout { spacing: 4px;
+                    opacity: draft.included ? 1 : 0.45;
+                    animate opacity { duration: Theme.control-motion; }
                     Label { text: draft.title; font-weight: 600; }
-                    Label { text: draft.author; color: Theme.muted; }
-                    Label { text: draft.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+                    Label { text: (draft.author != "" ? draft.author + " · " : "") + draft.detail; color: Theme.muted; font-size: 12px * Theme.font-scale; }
                 }
-                Action { icon: @image-url("../icons/more.svg"); accessible-label: Theme.t("Проверить части", "Review parts"); clicked => { State.selected-draft = idx; State.action("draft", idx); } }
+                Action { icon: @image-url("../icons/more.svg"); quiet: true; accessible-label: Theme.t("Проверить части", "Review parts"); clicked => { State.selected-draft = idx; State.action("draft", idx); } }
             }
         }
+        }
+       }
+      }
     }
     if State.selected-draft >= 0: VerticalLayout {
         spacing: 8px;

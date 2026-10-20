@@ -17,9 +17,13 @@ struct SavedUi {
     source: Option<SavedSource>,
     source_selection: bool,
     selected_sources: Vec<String>,
+    expanded_sources: Vec<String>,
     exact_time: String,
     import_path: String,
     import_folder_name: String,
+    import_folder_title: String,
+    import_expanded: bool,
+    import_file: bool,
     single_book: bool,
     selected_draft: i32,
 }
@@ -56,8 +60,17 @@ pub(super) fn save(ui: &app::Ui) {
             .map(|row| row.key.to_string())
             .collect(),
         exact_time: s.get_exact_time().into(),
+        expanded_sources: s
+            .get_sources()
+            .iter()
+            .filter(|row| !row.child && row.expanded)
+            .map(|row| row.key.to_string())
+            .collect(),
         import_path: s.get_import_path().into(),
         import_folder_name: s.get_import_folder_name().into(),
+        import_folder_title: s.get_import_folder_title().into(),
+        import_expanded: s.get_import_expanded(),
+        import_file: s.get_import_file(),
         single_book: s.get_single_book(),
         selected_draft: s.get_selected_draft(),
     });
@@ -120,9 +133,15 @@ pub fn restore() {
             }
         }
         s.set_books_scroll_y(saved.scroll);
+        for key in saved.expanded_sources {
+            s.invoke_action("toggle-source".into(), key.into());
+        }
         s.set_exact_time(saved.exact_time.into());
         s.set_import_path(saved.import_path.into());
         s.set_import_folder_name(saved.import_folder_name.into());
+        s.set_import_folder_title(saved.import_folder_title.into());
+        s.set_import_expanded(saved.import_expanded);
+        s.set_import_file(saved.import_file);
         s.set_single_book(saved.single_book);
         let draft_exists = usize::try_from(saved.selected_draft)
             .is_ok_and(|index| index < s.get_drafts().row_count());

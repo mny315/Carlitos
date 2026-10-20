@@ -18,9 +18,34 @@ impl View {
                 detail: crate::i18n::part_count(draft.files.len()).into(),
             })
             .collect();
-        window
-            .global::<State>()
-            .set_drafts(Rc::new(VecModel::from(rows)).into());
+        let state = window.global::<State>();
+        let included = self
+            .drafts
+            .iter()
+            .filter(|draft| draft.include && !draft.files.is_empty())
+            .count();
+        state.set_included_drafts(included as i32);
+        state.set_import_summary(
+            format!(
+                "{} · {} {included}",
+                crate::i18n::book_count(rows.len()),
+                crate::app::text("выбрано", "selected")
+            )
+            .into(),
+        );
+        let path = crate::source::display_path(state.get_import_path().as_str());
+        let title = if !state.get_import_folder_name().is_empty() {
+            state.get_import_folder_name().to_string()
+        } else if path.starts_with("content://") {
+            crate::app::text("Папка с книгами", "Book folder").to_owned()
+        } else {
+            std::path::Path::new(&path)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or(path)
+        };
+        state.set_import_folder_title(title.into());
+        state.set_drafts(Rc::new(VecModel::from(rows)).into());
     }
     pub(super) fn refresh_draft(&self) {
         let Some(w) = self.window.upgrade() else {

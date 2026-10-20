@@ -1,7 +1,7 @@
-export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, move-offset: float }
+export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, move-offset: float, move-offset-x: float }
 export struct PartItem { key: string, title: string, detail: string, number: string, active: bool, chapter: bool }
 export struct ImportItem { title: string, author: string, detail: string, included: bool }
-export struct SourceItem { key: string, path: string, detail: string, selected: bool }
+export struct SourceItem { key: string, title: string, path: string, detail: string, selected: bool, expanded: bool, animating: bool, child: bool, book-key: string }
 export struct SyncPeer { key: string, name: string, online: bool }
 import { Theme } from "components/theme.slint";
 export global State {
@@ -32,6 +32,7 @@ export global State {
     in-out property <string> query;
     in-out property <bool> search-open: false;
     in-out property <[BookItem]> books;
+    in-out property <int> book-columns: 1;
     in-out property <length> books-scroll-y;
     in-out property <bool> books-moving;
     private property <duration> books-move-start;
@@ -51,6 +52,12 @@ export global State {
     in-out property <[ImportItem]> drafts;
     in-out property <[PartItem]> draft-files;
     in-out property <[SourceItem]> sources;
+    in-out property <int> source-folder-count;
+    in-out property <string> source-update-path;
+    in-out property <bool> import-expanded;
+    in-out property <string> import-summary;
+    in-out property <string> import-folder-title;
+    in-out property <int> included-drafts;
     in-out property <bool> source-selection;
     in-out property <int> selected-source-count;
     in-out property <int> book-count;
@@ -82,6 +89,7 @@ export global State {
     in-out property <string> notice;
     in-out property <string> import-path;
     in-out property <string> import-folder-name;
+    in-out property <bool> import-file;
     out property <string> import-folder-label: !android ? import-path : import-folder-name != "" ? import-folder-name : import-path != "" ? Theme.t("Выбранная папка", "Selected folder") : Theme.t("Выбрать папку", "Choose folder");
     in-out property <bool> single-book: false;
     in-out property <int> selected-draft: -1;
@@ -130,10 +138,15 @@ export global State {
     callback display-settings-preview;
     in-out property <bool> display-settings-dragging: false;
     callback choose-folder;
+    callback choose-file;
     callback choose-source-folder;
     callback choose-cover;
     callback draft-changed(int, string, string, bool);
     callback draft-file-action(int, string);
+    public function add-file() {
+        if (android) { action("pick-file", ""); }
+        else { choose-file(); }
+    }
     public function navigate(page: int) {
         if (self.page == 4 && page != 4 && source-selection) { action("clear-source-selection", ""); }
         self.page = page; self.book-menu = false;

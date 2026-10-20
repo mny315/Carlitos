@@ -64,6 +64,7 @@ struct Controller {
     scan_source: Option<Id>,
     scans: Vec<std::thread::JoinHandle<()>>,
     drafts: Vec<Draft>,
+    import_folders: Vec<crate::storage::ImportFolder>,
     issues: Vec<String>,
     checkpoint: Instant,
     options: Options,

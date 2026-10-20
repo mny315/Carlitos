@@ -10,13 +10,14 @@ use anyhow::{Result, bail};
 impl Controller {
     pub(super) fn scan(&mut self, path: Location, single: bool) -> Result<()> {
         if let Location::File(path) = &path
-            && (!path.is_absolute() || !path.is_dir())
+            && (!path.is_absolute()
+                || (!path.is_dir() && !(path.is_file() && import::is_audio(path))))
         {
             bail!(
                 "{}",
                 text(
-                    "Укажите полный путь к существующей папке",
-                    "Enter an absolute path to an existing folder"
+                    "Укажите полный путь к папке или аудиофайлу",
+                    "Enter an absolute path to a folder or audio file"
                 )
             );
         }
@@ -28,6 +29,7 @@ impl Controller {
         let generation = self.scan_generation;
         self.scan_control = ScanControl::default();
         self.drafts.clear();
+        self.import_folders.clear();
         self.issues.clear();
         self.emit_drafts();
         let _ = self.events.try_send(Event::Scanning(
@@ -133,7 +135,7 @@ impl Controller {
                 let result = result?;
                 let drafts = preserve_source_books(&self.library, result.drafts)?;
                 self.save()?;
-                let library = self.store()?.import(drafts)?;
+                let library = self.store()?.import_folders(drafts, result.folders)?;
                 self.reconcile(library);
                 let mut message = text("Источник обновлён", "Source updated").to_string();
                 if !result.issues.is_empty() {
@@ -145,6 +147,7 @@ impl Controller {
             }
             let result = result?;
             self.drafts = result.drafts;
+            self.import_folders = result.folders;
             self.issues = result.issues;
             self.emit_drafts();
         }
@@ -167,9 +170,11 @@ impl Controller {
             bail!("{}", text("Укажите названия книг", "Enter book titles"));
         }
         self.save()?;
-        let library = self.store()?.import(drafts)?;
+        let folders = self.import_folders.clone();
+        let library = self.store()?.import_folders(drafts, folders)?;
         self.reconcile(library);
         self.drafts.clear();
+        self.import_folders.clear();
         self.issues.clear();
         self.emit_drafts();
         self.notice(
@@ -206,21 +211,26 @@ fn preserve_source_books(library: &Library, drafts: Vec<Draft>) -> Result<Vec<Dr
         .collect();
     let books: HashSet<_> = roots.difference(&parents).copied().collect();
     let mut grouped = BTreeMap::<String, Draft>::new();
-    for mut draft in drafts {
-        if let Some(path) = local_path(&draft.root_uri)
-            && let Some(root) = path.ancestors().find(|p| books.contains(p))
-        {
-            draft.root_uri = file_uri(root)?;
-            for file in &mut draft.files {
-                if let Some(path) = local_path(&file.uri) {
-                    file.relative = path.strip_prefix(root)?.to_string_lossy().into_owned();
-                }
+    for draft in drafts {
+        for mut file in draft.files {
+            let mut uri = draft.root_uri.clone();
+            if let Some(path) = local_path(&file.uri)
+                && let Some(root) = path.ancestors().find(|path| books.contains(path))
+            {
+                uri = file_uri(root)?;
+                file.relative = path.strip_prefix(root)?.to_string_lossy().into_owned();
             }
-        }
-        if let Some(existing) = grouped.get_mut(&draft.root_uri) {
-            existing.files.extend(draft.files);
-        } else {
-            grouped.insert(draft.root_uri.clone(), draft);
+            grouped
+                .entry(uri.clone())
+                .or_insert_with(|| Draft {
+                    root_uri: uri,
+                    title: draft.title.clone(),
+                    author: draft.author.clone(),
+                    include: draft.include,
+                    files: vec![],
+                })
+                .files
+                .push(file);
         }
     }
     Ok(grouped

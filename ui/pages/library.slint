@@ -9,6 +9,7 @@ component BookRow inherits Rectangle {
     row := Rectangle {
         private property <bool> current: State.active && State.current.key == root.book.key;
         private property <bool> playing: current && State.playing;
+        x: Theme.reduced-motion ? 0px : root.book.move-offset-x * (parent.width + 24px) * (1 - State.books-move-progress);
         y: Theme.reduced-motion ? 0px : (root.book.move-offset * parent.height + State.books-move-scroll-y) * (1 - State.books-move-progress);
         width: parent.width; height: parent.height; border-radius: 10px;
         background: book-focus.has-focus || current ? Theme.tint : book-touch.has-hover ? Theme.surface : transparent;
@@ -69,6 +70,15 @@ component FilterAction inherits Action {
 export component LibraryPage inherits VerticalLayout {
     spacing: State.android ? 6px : State.compact ? 8px : 16px;
     private property <length> book-row-height: max(84px, 30px + Theme.body * 3.4);
+    private property <int> book-columns: !State.android && self.width >= 960px * Theme.font-scale + 24px ? 2 : 1;
+    init => { State.book-columns = root.book-columns; }
+    changed book-columns => {
+        // Keep the first visible book in view when the window changes layout.
+        State.books-scroll-y = -floor(floor(max(0px, -State.books-scroll-y) / root.book-row-height) * State.book-columns / root.book-columns) * root.book-row-height;
+        State.book-columns = root.book-columns;
+        State.books-moving = false;
+        State.book-menu = false;
+    }
     private property <int> transition-phase;
     private property <int> next-filter;
     private property <int> transition-direction;
@@ -231,7 +241,15 @@ export component LibraryPage inherits VerticalLayout {
             opacity: root.transition-phase == 1 ? 1 - root.transition-progress : root.transition-phase == 2 ? root.transition-progress : 1;
             if State.books.length > 0 && !State.android: ListView {
                 content-y <=> State.books-scroll-y;
-                for book in State.books: BookRow { height: root.book-row-height; book: book; }
+                for row-index in ceil(State.books.length / root.book-columns): Rectangle {
+                    height: root.book-row-height;
+                    for column-index in min(root.book-columns, State.books.length - row-index * root.book-columns): BookRow {
+                        book: State.books[row-index * root.book-columns + column-index];
+                        x: column-index * (self.width + 24px);
+                        width: (parent.width - (root.book-columns - 1) * 24px) / root.book-columns;
+                        height: root.book-row-height;
+                    }
+                }
             }
             if State.books.length > 0 && State.android: Flickable {
                 width: parent.width; height: parent.height;

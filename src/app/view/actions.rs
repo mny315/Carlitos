@@ -1,6 +1,6 @@
 use super::View;
 use crate::app::Command;
-use crate::library::{Id, format_time, local_path, parse_time};
+use crate::library::{Id, format_time, parse_time};
 use crate::source::Location;
 use crate::{AppWindow, State};
 use slint::ComponentHandle;
@@ -177,7 +177,7 @@ impl View {
             "complete" => id.map(Command::Complete),
             "reset-progress" => id.map(Command::ResetProgress),
             "remove-book" => id.map(Command::RemoveBook),
-            "remove-source" => id.map(Command::RemoveSource),
+            "remove-source" | "toggle-source" | "rescan" | "update-source" | "begin-source-edit" | "finish-source-transition" => self.folder_action(action, arg),
             "select-sources"
             | "select-source"
             | "select-all-sources"
@@ -185,23 +185,6 @@ impl View {
             | "clear-source-selection"
             | "confirm-remove-sources"
             | "remove-sources" => self.source_selection_action(action, arg),
-            "rescan" => id.map(Command::Rescan),
-            "update-source" => id.and_then(|id| {
-                let source = self.library.sources.iter().find(|s| s.id == id)?;
-                let mut path = Location::input(state.get_relocate_path().as_str());
-                if let Location::File(local) = &mut path {
-                    *local = dunce::canonicalize(&*local).unwrap_or(local.clone());
-                }
-                let same = match &path {
-                    Location::File(local) => local_path(&source.uri).as_ref() == Some(local),
-                    Location::Document(uri) => &source.uri == uri,
-                };
-                Some(if same {
-                    Command::Rescan(id)
-                } else {
-                    Command::Relocate(id, path)
-                })
-            }),
             "relocate" => id.map(|id| {
                 Command::Relocate(id, Location::input(state.get_relocate_path().as_str()))
             }),
@@ -224,10 +207,6 @@ impl View {
                 self.begin_edit(id);
                 None
             }
-            "begin-source-edit" => {
-                self.begin_source_edit(id);
-                None
-            }
             // Resolve the move against the latest order on the controller
             // thread, so queued clicks neither collapse nor overwrite edits.
             "part-up" | "part-down" => arg
@@ -243,10 +222,12 @@ impl View {
             }
             "scan" => {
                 state.set_selected_draft(-1);
+                state.set_import_expanded(false);
                 Some(Command::Scan(Location::input(arg), state.get_single_book()))
             }
             "cancel-scan" => {
                 state.set_selected_draft(-1);
+                state.set_import_expanded(false);
                 Some(Command::CancelScan)
             }
             "import" => Some(Command::Import),

@@ -99,6 +99,7 @@ impl Default for Session {
 #[derive(Clone, Debug, Default)]
 pub struct Library {
     pub sources: Vec<Source>,
+    pub folder_sources: std::collections::BTreeSet<Id>,
     pub source_files: Vec<(Id, Id)>,
     pub media: Vec<Media>,
     pub books: Vec<Book>,

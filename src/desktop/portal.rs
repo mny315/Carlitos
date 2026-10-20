@@ -46,6 +46,7 @@ pub fn watch_theme(view: &Rc<std::cell::RefCell<crate::app::view::View>>) {
 
 pub fn bind(window: &AppWindow) {
     bind_picker(window, Picker::Import);
+    bind_picker(window, Picker::Audio);
     bind_picker(window, Picker::Cover);
     bind_picker(window, Picker::Source);
 }
@@ -53,6 +54,7 @@ pub fn bind(window: &AppWindow) {
 #[derive(Clone, Copy, PartialEq)]
 enum Picker {
     Import,
+    Audio,
     Cover,
     Source,
 }
@@ -79,7 +81,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                     .ok_or_else(|| anyhow::anyhow!("Window closed"))?;
                 let state = w.global::<State>();
                 let folder = std::path::PathBuf::from(match picker {
-                    Picker::Import => state.get_import_path().to_string(),
+                    Picker::Import | Picker::Audio => state.get_import_path().to_string(),
                     Picker::Cover => state.get_edit_cover_path().to_string(),
                     Picker::Source => state.get_relocate_path().to_string(),
                 });
@@ -98,9 +100,10 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                     .title(match picker {
                         Picker::Cover => text("Выбрать обложку", "Choose cover"),
                         Picker::Import => text("Добавить аудиокниги", "Add audiobooks"),
+                        Picker::Audio => text("Добавить аудиофайл", "Add an audio file"),
                         Picker::Source => text("Выбрать папку источника", "Choose source folder"),
                     })
-                    .directory(!cover)
+                    .directory(!cover && picker != Picker::Audio)
                     .current_folder::<&std::path::Path>(initial_folder)?
                     .filters(if cover {
                         vec![
@@ -110,6 +113,16 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                             ))
                             .mimetype("image/png")
                             .mimetype("image/jpeg"),
+                        ]
+                    } else if picker == Picker::Audio {
+                        vec![
+                            ashpd::desktop::file_chooser::FileFilter::new(text(
+                                "Аудиокниги",
+                                "Audiobooks",
+                            ))
+                            .mimetype("audio/*")
+                            .glob("*.m4b")
+                            .glob("*.aac"),
                         ]
                     } else {
                         vec![]
@@ -153,9 +166,14 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                         w.global::<State>().set_source_error("".into());
                     }
                     Ok(Some(path)) => {
-                        w.global::<State>().set_page(2);
-                        w.global::<State>()
-                            .set_import_path(path.display().to_string().into());
+                        let state = w.global::<State>();
+                        state.set_page(2);
+                        state.set_import_file(picker == Picker::Audio);
+                        state.set_import_folder_name("".into());
+                        state.set_import_path(path.display().to_string().into());
+                        if picker == Picker::Audio {
+                            state.invoke_action("scan".into(), state.get_import_path());
+                        }
                     }
                     Ok(None) => {}
                     Err(e)
@@ -178,10 +196,17 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                     Err(e) => {
                         let message = format!(
                             "{}: {e}. {}",
-                            text(
-                                "Не удалось открыть выбор папки",
-                                "Could not open folder picker"
-                            ),
+                            if picker == Picker::Audio {
+                                text(
+                                    "Не удалось открыть выбор файла",
+                                    "Could not open file picker",
+                                )
+                            } else {
+                                text(
+                                    "Не удалось открыть выбор папки",
+                                    "Could not open folder picker",
+                                )
+                            },
                             text(
                                 "Введите путь в поле папки",
                                 "Enter the path in the folder field"
@@ -207,6 +232,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
     match picker {
         Picker::Cover => window.global::<State>().on_choose_cover(choose),
         Picker::Import => window.global::<State>().on_choose_folder(choose),
+        Picker::Audio => window.global::<State>().on_choose_file(choose),
         Picker::Source => window.global::<State>().on_choose_source_folder(choose),
     }
 }

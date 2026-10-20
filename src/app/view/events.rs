@@ -44,6 +44,7 @@ impl View {
             #[cfg(target_os = "android")]
             Event::Picked(kind, uri, name, owner) => match kind.as_str() {
                 "folder" => {
+                    state.set_import_file(false);
                     state.set_import_path(uri.into());
                     state.set_import_folder_name(name.into());
                 }

@@ -5,6 +5,9 @@ use rusqlite::params;
 use std::path::Path;
 
 impl Store {
+    pub fn ensure_folder(&mut self, uri: &str) -> Result<Id> {
+        ensure_folder(&self.conn, uri)
+    }
     pub fn relocate_location(
         &mut self,
         source: Id,
@@ -188,6 +191,31 @@ impl Store {
         tx.commit()?;
         self.load()
     }
+}
+
+pub(super) fn ensure_folder(conn: &rusqlite::Connection, uri: &str) -> Result<Id> {
+    if let Some(identity) = crate::source::document_identity(uri) {
+        let sources: Vec<(Id, String)> = conn
+            .prepare("SELECT id,uri FROM sources WHERE kind='folder'")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        if let Some((id, _)) = sources
+            .into_iter()
+            .find(|(_, old)| crate::source::document_identity(old).as_ref() == Some(&identity))
+        {
+            conn.execute("UPDATE sources SET uri=?1 WHERE id=?2", params![uri, id])?;
+            return Ok(id);
+        }
+    }
+    conn.execute(
+        "INSERT INTO sources(uri,kind) VALUES(?1,'folder') ON CONFLICT(uri,kind) DO NOTHING",
+        [uri],
+    )?;
+    Ok(conn.query_row(
+        "SELECT id FROM sources WHERE uri=?1 AND kind='folder'",
+        [uri],
+        |row| row.get(0),
+    )?)
 }
 
 fn remove_source_records(tx: &rusqlite::Transaction<'_>, id: Id) -> Result<()> {

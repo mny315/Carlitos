@@ -6,13 +6,14 @@ pub fn watch_theme(_: &Rc<std::cell::RefCell<crate::app::view::View>>) {
     // The existing Winit ThemeChanged handler reports Windows' preference.
 }
 pub fn bind(window: &AppWindow) {
-    for picker in [Picker::Import, Picker::Cover, Picker::Source] {
+    for picker in [Picker::Import, Picker::Audio, Picker::Cover, Picker::Source] {
         bind_picker(window, picker);
     }
 }
 #[derive(Clone, Copy, PartialEq)]
 enum Picker {
     Import,
+    Audio,
     Cover,
     Source,
 }
@@ -37,7 +38,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
             let state = w.global::<State>();
             let folder = std::path::PathBuf::from(
                 match picker {
-                    Picker::Import => state.get_import_path(),
+                    Picker::Import | Picker::Audio => state.get_import_path(),
                     Picker::Cover => state.get_edit_cover_path(),
                     Picker::Source => state.get_relocate_path(),
                 }
@@ -45,6 +46,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
             );
             let mut dialog = rfd::AsyncFileDialog::new().set_title(match picker {
                 Picker::Import => text("Добавить аудиокниги", "Add audiobooks"),
+                Picker::Audio => text("Добавить аудиофайл", "Add an audio file"),
                 Picker::Cover => text("Выбрать обложку", "Choose cover"),
                 Picker::Source => text("Выбрать папку источника", "Choose source folder"),
             });
@@ -57,6 +59,14 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
             let selected = if picker == Picker::Cover {
                 dialog
                     .add_filter(text("Изображения", "Images"), &["jpg", "jpeg", "png"])
+                    .pick_file()
+                    .await
+            } else if picker == Picker::Audio {
+                dialog
+                    .add_filter(
+                        text("Аудиокниги", "Audiobooks"),
+                        &["mp3", "m4b", "m4a", "aac", "flac", "wav", "wave"],
+                    )
                     .pick_file()
                     .await
             } else {
@@ -85,7 +95,16 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                     Picker::Cover => state.invoke_action("preview-cover".into(), path),
                     Picker::Import => {
                         state.set_page(2);
+                        state.set_import_file(false);
+                        state.set_import_folder_name("".into());
                         state.set_import_path(path);
+                    }
+                    Picker::Audio => {
+                        state.set_page(2);
+                        state.set_import_file(true);
+                        state.set_import_folder_name("".into());
+                        state.set_import_path(path);
+                        state.invoke_action("scan".into(), state.get_import_path());
                     }
                     Picker::Source => {
                         state.set_relocate_path(path);
@@ -105,6 +124,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
     match picker {
         Picker::Cover => window.global::<State>().on_choose_cover(choose),
         Picker::Import => window.global::<State>().on_choose_folder(choose),
+        Picker::Audio => window.global::<State>().on_choose_file(choose),
         Picker::Source => window.global::<State>().on_choose_source_folder(choose),
     }
 }
