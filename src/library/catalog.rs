@@ -25,10 +25,10 @@ impl Library {
             .iter()
             .filter_map(|s| local_path(&s.uri).map(|p| (s.id, p)))
             .collect();
-        let roots: HashMap<_, _> = paths
-            .iter()
-            .map(|(id, path)| (path.as_path(), *id))
-            .collect();
+        let mut roots = HashMap::<_, Vec<Id>>::new();
+        for (id, path) in &paths {
+            roots.entry(path.as_path()).or_default().push(*id);
+        }
         let mut members: HashMap<Id, HashSet<Id>> = HashMap::new();
         for book in &self.books {
             members.entry(book.source_id).or_default().insert(book.id);
@@ -50,8 +50,10 @@ impl Library {
         }
         let mut include = |book, path: &std::path::Path| {
             for ancestor in path.ancestors() {
-                if let Some(source) = roots.get(ancestor) {
-                    members.entry(*source).or_default().insert(book);
+                if let Some(sources) = roots.get(ancestor) {
+                    for source in sources {
+                        members.entry(*source).or_default().insert(book);
+                    }
                 }
             }
         };
