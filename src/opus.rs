@@ -75,7 +75,9 @@ impl Decoder {
         let pre_skip = u64::from(u16::from_le_bytes([header[10], header[11]]));
         let gain = i16::from_le_bytes([header[16], header[17]]);
         let first_ts = params.start_ts;
-        let start = first_ts.max(pre_skip);
+        let start = first_ts
+            .checked_add(pre_skip)
+            .context("Invalid Opus start")?;
         let stop = first_ts
             .checked_add(params.n_frames.context("Missing Opus duration")?)
             .context("Invalid Opus duration")?;
@@ -275,6 +277,20 @@ mod tests {
         let file = tempfile::NamedTempFile::new()?;
         std::fs::write(file.path(), b"OpusHead\x01\x01 invalid stream")?;
         assert!(Decoder::open(file.path()).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn nonzero_ogg_start_preserves_duration_samples_and_seek() -> Result<()> {
+        let mut original = Decoder::open(Path::new("tests/fixtures/import.opus"))?;
+        let mut offset = Decoder::open(Path::new("tests/fixtures/import-offset.opus"))?;
+        assert_eq!(offset.duration, original.duration);
+        assert_eq!(decode(&mut offset)?, decode(&mut original)?);
+        for millis in [400, 0] {
+            original.seek(millis)?;
+            offset.seek(millis)?;
+            assert_eq!(decode(&mut offset)?, decode(&mut original)?);
+        }
         Ok(())
     }
 

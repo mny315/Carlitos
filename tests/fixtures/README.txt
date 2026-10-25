@@ -12,6 +12,8 @@ ffmpeg -f lavfi -i sine=frequency=523:sample_rate=48000:duration=1.2 -ac 2 -c:a 
 ffmpeg -f lavfi -i sine=frequency=523:sample_rate=48000:duration=0.02 -ac 1 -c:a libopus -b:a 48k -map_metadata -1 import-short.opus
 
 Tests add their own metadata, chapters and cover images to temporary copies.
+import-offset.opus is import.opus with all nonzero Ogg granule positions increased
+by 48000 and the affected page CRCs recomputed. It tests nonzero stream origins.
 
 HE-AAC fixtures use GStreamer's fdkaacenc, then lossless remuxing with FFmpeg:
 ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 2 -ar 48000 source.wav
