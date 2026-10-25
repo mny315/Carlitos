@@ -8,6 +8,8 @@ ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 1 -ar 44100 -c:a aac -b:a 3
 ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 2 -ar 32000 -c:a aac -b:a 64k -map_metadata -1 -f mp4 import.m4b
 ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 2 -ar 48000 -c:a flac -map_metadata -1 import.flac
 ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 2 -ar 48000 -c:a libopus -b:a 64k -map_metadata -1 import.opus
+ffmpeg -f lavfi -i sine=frequency=523:sample_rate=48000:duration=1.2 -ac 2 -c:a libopus -b:a 48k -map_metadata -1 import-stereo.opus
+ffmpeg -f lavfi -i sine=frequency=523:sample_rate=48000:duration=0.02 -ac 1 -c:a libopus -b:a 48k -map_metadata -1 import-short.opus
 
 Tests add their own metadata, chapters and cover images to temporary copies.
 

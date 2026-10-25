@@ -7,6 +7,8 @@ pub mod app;
 mod audio_processing;
 pub mod import;
 pub mod library;
+#[cfg(any(windows, test))]
+mod opus;
 mod platform;
 pub mod player;
 pub mod settings;

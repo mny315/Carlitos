@@ -30,7 +30,7 @@
           ];
         };
         cargoLock.lockFile = ./Cargo.lock;
-        nativeBuildInputs = with pkgs; [ pkg-config makeWrapper ];
+        nativeBuildInputs = with pkgs; [ pkg-config makeWrapper cmake ];
         buildInputs = graphics ++ [ audio.core ] ++ plugins;
         GST_PLUGIN_SYSTEM_PATH_1_0 = gstPath;
         LD_LIBRARY_PATH = libraryPath;
@@ -106,7 +106,7 @@
       android = import ./nix/android.nix { inherit nixpkgs system; };
       windows = pkgs.mkShell {
         nativeBuildInputs = with pkgs; [
-          rustup cargo-xwin python3
+          rustup cargo-xwin python3 cmake ninja
           wineWow64Packages.stable xvfb-run
           llvmPackages.clang llvmPackages.lld llvmPackages.llvm
           # cc-rs needs the MSVC archive interface, which LLVM's Linux
@@ -121,7 +121,7 @@
         };
       };
       default = pkgs.mkShell {
-        nativeBuildInputs = with pkgs; [ rustc cargo rustfmt clippy pkg-config ffmpeg grim wtype python3 dbus patchelf bubblewrap ];
+        nativeBuildInputs = with pkgs; [ rustc cargo rustfmt clippy pkg-config cmake ffmpeg grim wtype python3 dbus patchelf bubblewrap ];
         CARLITOS_TEST_BUSYBOX = "${pkgs.pkgsStatic.busybox}/bin/busybox";
         buildInputs = graphics ++ [ audio.core ] ++ plugins;
         GST_PLUGIN_SYSTEM_PATH_1_0 = audio.pluginPath;

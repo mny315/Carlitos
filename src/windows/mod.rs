@@ -1,4 +1,4 @@
-//! Windows uses only OS media/desktop services; no GStreamer runtime is shipped.
+//! Windows uses OS media/desktop services and built-in Opus; no GStreamer runtime is shipped.
 pub(crate) mod decoder;
 pub mod media;
 pub(crate) mod output;

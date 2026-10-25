@@ -1,3 +1,7 @@
+[env]
+# libopus defaults to the DLL CRT; match Carlitos's statically linked MSVC CRT.
+CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc = { value = "data/windows/opus-toolchain.cmake", relative = true, force = true }
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 

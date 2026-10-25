@@ -170,6 +170,7 @@ fn supported_codecs_decode_seek_and_reach_end() -> anyhow::Result<()> {
             &include_bytes!("../fixtures/import-he-aac-v2.m4b")[..],
         ),
         ("Книга.flac", &include_bytes!("../fixtures/import.flac")[..]),
+        ("Книга.opus", &include_bytes!("../fixtures/import.opus")[..]),
     ] {
         let path = dir.path().join(name);
         std::fs::write(&path, bytes)?;

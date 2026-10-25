@@ -87,6 +87,8 @@ fn windows_resources() {
         "data/licenses/SLINT-LICENSE.md",
         "data/licenses/THIRD-PARTY.md",
         "data/licenses/DEJAVU-LICENSE.txt",
+        "data/licenses/OPUS-LICENSE.txt",
+        "data/licenses/SYMPHONIA-LICENSE.txt",
         "vendor/sonic/LICENSE",
     ]
     .map(|path| {

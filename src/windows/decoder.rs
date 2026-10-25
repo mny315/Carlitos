@@ -7,7 +7,7 @@ use windows::{
 const AUDIO: u32 = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
 
 pub(crate) struct Decoder {
-    reader: IMFSourceReader,
+    source: Source,
     pub rate: u32,
     pub channels: u16,
     pub duration: Option<u64>,
@@ -15,10 +15,29 @@ pub(crate) struct Decoder {
     trim_before: u64,
 }
 
+enum Source {
+    MediaFoundation(IMFSourceReader),
+    Opus(crate::opus::Decoder),
+}
+
 impl Decoder {
     pub fn open(uri: &str) -> Result<Self> {
         super::initialize_media()?;
         let path = crate::library::local_path(uri).context("Expected a local audio file")?;
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("opus"))
+        {
+            let decoder = crate::opus::Decoder::open(&path)?;
+            return Ok(Self {
+                rate: 48_000,
+                channels: decoder.channels,
+                duration: Some(decoder.duration),
+                end: false,
+                trim_before: 0,
+                source: Source::Opus(decoder),
+            });
+        }
         unsafe {
             let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), None)?;
             reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)?;
@@ -42,7 +61,7 @@ impl Decoder {
                 .and_then(|v| u64::try_from(&v).ok())
                 .map(|v| v / 10_000);
             Ok(Self {
-                reader,
+                source: Source::MediaFoundation(reader),
                 rate,
                 channels: channels as u16,
                 duration,
@@ -53,10 +72,17 @@ impl Decoder {
     }
 
     pub fn seek(&mut self, millis: u64) -> Result<()> {
+        let reader = match &mut self.source {
+            Source::MediaFoundation(reader) => reader,
+            Source::Opus(decoder) => {
+                decoder.seek(millis)?;
+                self.end = decoder.end;
+                return Ok(());
+            }
+        };
         let time = millis.min(i64::MAX as u64 / 10_000) as i64 * 10_000;
         unsafe {
-            self.reader
-                .SetCurrentPosition(&GUID::zeroed(), &time.into())?;
+            reader.SetCurrentPosition(&GUID::zeroed(), &time.into())?;
         }
         self.trim_before = millis.saturating_mul(u64::from(self.rate)) / 1000;
         self.end = false;
@@ -68,11 +94,19 @@ impl Decoder {
         if self.end {
             return Ok(Vec::new());
         }
+        let reader = match &mut self.source {
+            Source::MediaFoundation(reader) => reader,
+            Source::Opus(decoder) => {
+                let pcm = decoder.read()?;
+                self.end = decoder.end;
+                return Ok(pcm);
+            }
+        };
         unsafe {
             let mut flags = 0;
             let mut timestamp = 0;
             let mut sample = None;
-            self.reader.ReadSample(
+            reader.ReadSample(
                 AUDIO,
                 0,
                 None,

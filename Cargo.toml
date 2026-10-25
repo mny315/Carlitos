@@ -1,6 +1,6 @@
 [package]
 name = "carlitos"
-version = "1.0.5"
+version = "1.0.6"
 edition = "2024"
 autotests = false
 rust-version = "1.92"
@@ -63,8 +63,12 @@ lofty = "0.25"
 
 [dev-dependencies]
 lofty = "0.25"
+opusic-sys = "0.7.5"
+symphonia = { version = "0.5.5", default-features = false, features = ["ogg"] }
 
 [target.'cfg(windows)'.dependencies]
+opusic-sys = "0.7.5"
+symphonia = { version = "0.5.5", default-features = false, features = ["ogg"] }
 slint = { version = "=1.18.1", default-features = false, features = ["unstable-fontique-011"] }
 async-io = "2.6"
 rfd = { version = "0.17", default-features = false }
