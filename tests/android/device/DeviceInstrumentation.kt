@@ -45,6 +45,9 @@ class DeviceInstrumentation : Instrumentation() {
     private var sourceSelectionOnly = false
     private var chaptersOnly = false
     private var inputOnly = false
+    private var feedbackOnly = false
+    private var settingsOnly = false
+    private var backgroundOnly = false
     private var pauseOnly = false
     private var requireBluetooth = false
     private var timedSwipe: String? = null
@@ -67,6 +70,9 @@ class DeviceInstrumentation : Instrumentation() {
         sourceSelectionOnly = arguments?.getString("source-selection-only") == "true"
         chaptersOnly = arguments?.getString("chapters-only") == "true"
         inputOnly = arguments?.getString("input-only") == "true"
+        feedbackOnly = arguments?.getString("feedback-only") == "true"
+        settingsOnly = arguments?.getString("settings-only") == "true"
+        backgroundOnly = arguments?.getString("background-only") == "true"
         pauseOnly = arguments?.getString("pause-only") == "true"
         requireBluetooth = arguments?.getString("require-bluetooth") == "true"
         timedSwipe = arguments?.getString("timed-swipe")
@@ -149,7 +155,7 @@ class DeviceInstrumentation : Instrumentation() {
                 return
             }
             if (ui) {
-                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly, pauseOnly, requireBluetooth, sourceSelectionOnly)
+                UiSuite(this).run(libraryOnly, chaptersOnly, inputOnly, pauseOnly, requireBluetooth, sourceSelectionOnly, feedbackOnly, settingsOnly, backgroundOnly)
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android UI tests\n") })
                 return
             }

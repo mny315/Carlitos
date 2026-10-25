@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn standalone_opus_in_collection_root_is_imported_as_a_book() -> anyhow::Result<()> {
+    for extension in ["opus", "OPUS"] {
+        let temp = tempdir()?;
+        let root = temp.path().join("Аудиокниги");
+        audio(&root, "Книга/1.wav")?;
+        audio(&root, "Книга/2.wav")?;
+        let recording = root.join(format!("Отдельная запись.{extension}"));
+        std::fs::write(&recording, include_bytes!("../../fixtures/import.opus"))?;
+
+        let result = scan(vec![root], ImportMode::Books, ScanControl::default())?;
+        assert!(result.issues.is_empty(), "{:?}", result.issues);
+        assert_eq!(result.drafts.len(), 2);
+        let standalone = result
+            .drafts
+            .iter()
+            .find(|draft| draft.title == "Отдельная запись")
+            .expect("The root Opus recording must appear in the import preview");
+        assert_eq!(standalone.files.len(), 1);
+        assert_eq!(standalone.files[0].uri, file_uri(&recording)?);
+        assert!(
+            standalone.files[0]
+                .duration
+                .is_some_and(|d| (900..=1400).contains(&d))
+        );
+        assert!(standalone.include);
+
+        let mut store = Store::open(&temp.path().join("db"))?;
+        let library = store.import_folders(result.drafts, result.folders)?;
+        assert_eq!(library.books.len(), 2);
+        assert_eq!(library.parts.len(), 3);
+        assert!(
+            library
+                .books
+                .iter()
+                .any(|book| book.title == "Отдельная запись")
+        );
+        assert_eq!(store.load()?.books.len(), 2);
+    }
+    Ok(())
+}
+
+#[test]
 fn import_reads_both_mp4_chapter_formats() -> anyhow::Result<()> {
     use std::time::Duration;
 

@@ -52,6 +52,8 @@ object Bridge {
     }
     @JvmStatic external fun initialize(context: Context)
     @JvmStatic external fun event(message: String)
+    @JvmStatic fun voiceBands(): Long = VoiceLevel.readBands()
+    @JvmStatic fun setVisualizerEnabled(enabled: Boolean) { VoiceLevel.enabled = enabled }
     fun emit(op: String, vararg fields: Pair<String, Any?>) {
         val event = JSONObject().put("op", op)
         fields.forEach { (key, value) -> event.put(key, value ?: JSONObject.NULL) }
@@ -68,6 +70,7 @@ object Bridge {
                                 else if (android.os.Build.VERSION.SDK_INT >= 27) HapticFeedbackConstants.TEXT_HANDLE_MOVE
                                 else HapticFeedbackConstants.CLOCK_TICK
                             "tick" -> HapticFeedbackConstants.CLOCK_TICK
+                            "playback" -> HapticFeedbackConstants.VIRTUAL_KEY
                             else -> HapticFeedbackConstants.KEYBOARD_TAP
                         })
                 } else if (command.getString("op") == "background") {
@@ -107,6 +110,13 @@ object Bridge {
         try {
             val current = service
             if (current != null) current.command(command)
+            else if (pending.isEmpty() && (command.getString("op") == "snapshot" || command.getString("op") == "stop")) {
+                // Lifecycle checkpoints must not create an idle audio service.
+                // Android may have released it while the app was in background.
+                // Acknowledge its absence so Rust saves its confirmed position
+                // and can also complete a pending shutdown without a timeout.
+                emit("service_stopped")
+            }
             else {
                 check(pending.size < 64) { "Playback service did not start" }
                 pending.addLast(command)

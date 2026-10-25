@@ -34,7 +34,7 @@ fn slider_step(
         let size = w.window().size().to_logical(w.window().scale_factor());
         let compact = s.get_compact();
         let volume_width = if compact { 45. } else { 68. };
-        let volume_y = size.height - if compact { 157. } else { 118. };
+        let volume_y = size.height - if compact { 176. } else { 134. };
         let volume = |fraction: f32| {
             slint::LogicalPosition::new(size.width - 12. - volume_width * (1. - fraction), volume_y)
         };

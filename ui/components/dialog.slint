@@ -2,7 +2,7 @@ import { State } from "../state.slint";
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Action, Label, Field, Cover, SeekBar } from "controls.slint";
-import { Transport, MobileTimeline } from "player.slint";
+import { Transport, MobileTimeline, MobileVolumeAction, MobileRateAction } from "player.slint";
 import { PlaybackSheet } from "playback-sheet.slint";
 export component AppDialog inherits Rectangle {
     in property <length> top-inset;
@@ -100,6 +100,10 @@ export component AppDialog inherits Rectangle {
                 Label { text: State.current.title; wrap: word-wrap; }
                 Transport { }
                 MobileTimeline { }
+                HorizontalLayout { alignment: center; spacing: 8px;
+                    MobileVolumeAction { }
+                    MobileRateAction { }
+                }
             }
             if root.dialog-kind == 6: VerticalLayout { spacing: State.android ? 20px : 12px;
                 HorizontalLayout { spacing: 12px;

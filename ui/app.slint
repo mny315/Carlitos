@@ -1,5 +1,5 @@
 import { Palette } from "std-widgets.slint";
-import { State, BookItem, PartItem, ImportItem, SourceItem, SyncPeer } from "state.slint";
+import { State, BookItem, PartItem, ImportItem, SourceItem, SyncPeer, VoiceBands } from "state.slint";
 import { Theme } from "components/theme.slint";
 import { Action, Label, PageFrame } from "components/controls.slint";
 import { SyncAction } from "components/sync-action.slint";
@@ -7,12 +7,13 @@ import { PlayerPanel, MobilePlayer } from "components/player.slint";
 import { AppDialog } from "components/dialog.slint";
 import { BookMenu } from "components/book-menu.slint";
 import { NoticeBanner } from "components/notice.slint";
+import { BookBackdrop } from "components/book-backdrop.slint";
 import { LibraryPage } from "pages/library.slint";
 import { BookPage } from "pages/book.slint";
 import { ImportPage } from "pages/import.slint";
 import { SettingsPage, AboutPage } from "pages/settings.slint";
 import { SourcesPage } from "pages/sources.slint";
-export { State, Theme, Palette, BookItem, PartItem, ImportItem, SourceItem, SyncPeer }
+export { State, Theme, Palette, BookItem, PartItem, ImportItem, SourceItem, SyncPeer, VoiceBands }
 export component AppWindow inherits Window {
     title: "Carlitos";
     icon: @image-url("../data/icons/io.github.mny315.Carlitos.svg");
@@ -26,6 +27,7 @@ export component AppWindow inherits Window {
     // Stop observing the animation clock once the palette has settled.
     Timer { interval: 50ms; running: Theme.transitioning; triggered => { Theme.finish-transition(); } }
     Timer { interval: 40ms; running: State.books-moving; triggered => { State.finish-book-move(); } }
+    Timer { interval: 50ms; running: State.notice-timed && State.notice != ""; triggered => { State.finish-notice-timeout(); } }
     in property <int> current-overlay: State.overlay;
     changed current-overlay => { if (self.current-overlay == 0) { shell.focus(); } }
     in property <bool> book-menu-open: State.book-menu;
@@ -50,6 +52,7 @@ export component AppWindow inherits Window {
     changed search-open => { if (State.android && !self.search-open && State.page == 0) { shell.focus(); } }
     public function focus-shell() { shell.focus(); }
     public function sync-theme() { Palette.color-scheme = Theme.dark ? ColorScheme.dark : ColorScheme.light; }
+    BookBackdrop { x: 0px; y: 0px; width: root.width; height: root.height; }
     if State.android: Rectangle {
         x: 0px; y: 0px; width: root.width; height: root.safe-area-insets.top;
         background: Theme.surface;
@@ -152,8 +155,11 @@ export component AppWindow inherits Window {
                             x: 0px; y: 0px;
                             width: parent.width;
                             text: State.notice;
+                            top-gap: State.android ? 12px : 0px;
                             bottom-gap: State.compact ? 12px : 16px;
-                            dismissed => { State.notice = ""; }
+                            timed: State.notice-timed;
+                            remaining: State.notice-remaining;
+                            dismissed => { State.dismiss-notice(); }
                         }
                         Rectangle {
                             y: notice.height; width: parent.width; height: max(0px, parent.height - self.y);

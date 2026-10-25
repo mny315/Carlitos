@@ -45,6 +45,8 @@ pub fn attach(ui: &app::Ui) {
 }
 
 pub fn detach(ui: &app::Ui) {
+    ui.window.global::<State>().set_ui_visible(false);
+    crate::visualizer::set_enabled(false);
     i_slint_backend_android_activity::set_touch_filter(None);
     BACK_PENDING.store(false, Ordering::Relaxed);
     // TextInput keeps an IME composition outside its bound text property.

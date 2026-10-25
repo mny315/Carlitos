@@ -10,9 +10,12 @@ import wave
 
 root = pathlib.Path('target/tests/android/playback/fixtures/Carlitos-playback')
 root.mkdir(parents=True, exist_ok=True)
-for name in ('tone', 'silence'):
-    samples = array.array('h', (int(2500 * math.sin(2 * math.pi * 440 * i / 48000))
-        if name == 'tone' or i // 48000 % 4 == 0 else 0 for i in range(48000 * 60)))
+for name in ('tone', 'silence', 'voice'):
+    envelope = (.08, .3, .85, .55, 1., .4, .15, 0., 0., .2, .7, .95, .45, .1, 0., 0.)
+    samples = array.array('h', (int(
+        (9000 * envelope[(i // 3840) % len(envelope)] if name == 'voice' else 2500)
+        * math.sin(2 * math.pi * 440 * i / 48000))
+        if name != 'silence' or i // 48000 % 4 == 0 else 0 for i in range(48000 * 60)))
     if sys.byteorder != 'little':
         samples.byteswap()
     with wave.open(str(root / (name + '.wav')), 'wb') as output:

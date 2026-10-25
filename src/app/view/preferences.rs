@@ -38,6 +38,7 @@ impl View {
         let _ =
             crate::android::bridge::dispatch(serde_json::json!({"op":"system-bars", "dark":dark}));
         theme.set_reduced_motion(self.settings.reduced_motion);
+        s.set_animated_background(self.settings.animated_background);
         self.apply_display_settings();
         w.invoke_sync_theme();
         s.set_theme_index(match self.settings.theme.as_str() {
@@ -112,6 +113,7 @@ impl View {
         self.settings.close_to_tray = s.get_close_to_tray();
         self.settings.local_sync = s.get_local_sync();
         self.settings.reduced_motion = t.get_reduced_motion();
+        self.settings.animated_background = s.get_animated_background();
         self.settings.text_scale = s.get_text_size_percent().clamp(70, 205) as f32 / 100.0;
         self.settings.android_ui_scale = s.get_ui_scale_percent().clamp(70, 160) as f32 / 100.0;
         self.settings.library_sort = ["listening", "title", "author", "year", "genre"]

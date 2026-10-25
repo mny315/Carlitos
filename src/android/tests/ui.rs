@@ -9,18 +9,35 @@ use jni::{
 };
 use serde_json::{Value, json};
 use slint::{ComponentHandle, Model};
+use std::sync::atomic::{AtomicU32, Ordering};
+
+static BACKDROP_SAMPLES: AtomicU32 = AtomicU32::new(0);
+pub(crate) fn record_backdrop_sample() {
+    BACKDROP_SAMPLES.fetch_add(1, Ordering::Relaxed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mny315_carlitos_UiSuite_nativeBackdropFrames(
+    _env: JNIEnv<'_>,
+    _class: JClass<'_>,
+) -> jni::sys::jlong {
+    i64::from(BACKDROP_SAMPLES.load(Ordering::Relaxed))
+}
 
 #[path = "../../../tests/support/animation.rs"]
 mod animation;
 
 thread_local! {
     static HAPTIC_TICKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static HAPTIC_BUTTONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     static ANIMATION_REPORT: std::cell::RefCell<Value> = const { std::cell::RefCell::new(Value::Null) };
 }
 
 pub(super) fn record_haptic(kind: &str) {
     if kind == "scale-tick" {
         HAPTIC_TICKS.set(HAPTIC_TICKS.get() + 1);
+    } else if kind == "button" || kind == "playback" {
+        HAPTIC_BUTTONS.set(HAPTIC_BUTTONS.get() + 1);
     }
 }
 
@@ -58,7 +75,7 @@ fn request(request: Value) -> Result<Value> {
                         }
                         "updated" => view.event(Event::SourceUpdated(0, "Source updated".into())),
                         "error" => view.event(Event::Notice("Test error".into())),
-                        "dismiss" => s.set_notice("".into()),
+                        "dismiss" => s.invoke_dismiss_notice(),
                         kind => anyhow::bail!("Unknown feedback: {kind}"),
                     }
                     Ok(())
@@ -79,6 +96,11 @@ fn request(request: Value) -> Result<Value> {
                 return Ok(json!(elements));
             }
             "state" => {},
+            "background" => {
+                if let Some(enabled) = request["enabled"].as_bool() { s.set_animated_background(enabled); }
+                if let Some(reduced) = request["reduced"].as_bool() { t.set_reduced_motion(reduced); }
+                s.invoke_settings_changed();
+            }
             op => anyhow::bail!("Unknown UI test operation {op}"),
         }
         let size = w.window().size().to_logical(w.window().scale_factor());
@@ -99,8 +121,14 @@ fn request(request: Value) -> Result<Value> {
             "text_size_percent":s.get_text_size_percent(),"ui_scale_percent":s.get_ui_scale_percent(),
             "haptic_ticks":HAPTIC_TICKS.get(),"notice":s.get_notice().as_str(),"scanning":s.get_scanning(),
             "scale":w.window().scale_factor(),"width":size.width,"height":size.height});
+        snapshot["notice_timed"] = json!(s.get_notice_timed());
+        snapshot["haptic_buttons"] = json!(HAPTIC_BUTTONS.get());
+        snapshot["notice_remaining"] = json!(s.get_notice_remaining());
         snapshot["picker_owner"] = json!(s.get_picker_owner().as_str());
         snapshot["loading"] = json!(s.get_loading());
+        snapshot["background_enabled"] = json!(s.get_animated_background());
+        snapshot["background_running"] = json!(s.get_backdrop_running());
+        snapshot["ui_visible"] = json!(s.get_ui_visible());
         snapshot["sync_enabled"] = json!(s.get_local_sync());
         snapshot["sync_manual"] = json!(s.get_sync_manual());
         snapshot["sync_invitation"] = json!(!s.get_sync_invitation().is_empty());

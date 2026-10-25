@@ -76,6 +76,39 @@ fn book_speed_sync_is_independent_of_progress_and_survives_restart() -> Result<(
 }
 
 #[test]
+fn a_failed_speed_merge_rolls_back_the_entire_sync_exchange() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut a, mut first) = fixture(temp.path(), "sender", b"same recording")?;
+    let (mut b, mut second) = fixture(temp.path(), "receiver", b"same recording")?;
+    let original = progress(&mut b, &mut second, 15_000)?;
+    b.save_book_rate(second.books[0].id, 1.25)?;
+    let original_rates = b.sync_rates(&second)?;
+    let mut records = progress(&mut a, &mut first, 90_000)?;
+    records[0].updated = original[0].updated + 60_000;
+    a.save_book_rate(first.books[0].id, 1.75)?;
+    let mut rates = a.sync_rates(&first)?;
+    rates[0].updated = original_rates[0].updated + 60_000;
+    let conn = rusqlite::Connection::open(temp.path().join("receiver/db"))?;
+    conn.execute_batch("CREATE TRIGGER fail_sync_speed BEFORE INSERT ON book_rates BEGIN SELECT RAISE(ABORT, 'test speed write failure'); END;")?;
+    assert!(b.merge_sync_exchange(&second, &records, &rates).is_err());
+    let saved = b.load()?;
+    assert_eq!(saved.session.position, 15_000);
+    assert_eq!(saved.progress[0].position, 15_000);
+    assert_eq!(b.sync_records(&saved)?, original);
+    assert_eq!(b.sync_rates(&saved)?, original_rates);
+    conn.execute_batch("DROP TRIGGER fail_sync_speed;")?;
+    let (received, changed, rate_changes) = b.merge_sync_exchange(&second, &records, &rates)?;
+    assert_eq!(changed, vec![second.books[0].id]);
+    assert_eq!(rate_changes, vec![second.books[0].id]);
+    assert_eq!(received.session.position, 90_000);
+    assert_eq!(b.load()?.progress[0].position, 90_000);
+    assert_eq!(b.book_rate(second.books[0].id)?, Some(1.75));
+    assert_eq!(b.sync_records(&received)?, records);
+    assert_eq!(b.sync_rates(&received)?, rates);
+    Ok(())
+}
+
+#[test]
 fn speed_conflicts_converge_and_invalid_or_unmatched_values_do_not_apply() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (mut store, library) = fixture(temp.path(), "a", b"edition")?;

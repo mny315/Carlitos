@@ -12,6 +12,18 @@ pub(super) struct SourceGroup {
     books: Vec<Id>,
 }
 
+fn selected_sources_for_removal(groups: &[SourceGroup], selected: &BTreeSet<Id>) -> Vec<Id> {
+    // A refresh can add a new member to a selected group, making its checkbox
+    // unchecked. Only include folders that are actually shown as checked.
+    groups
+        .iter()
+        .filter(|group| group.members.iter().all(|id| selected.contains(id)))
+        .flat_map(|group| group.members.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 fn groups(library: &Library) -> Vec<SourceGroup> {
     let books = library.source_books();
     let paths: BTreeMap<_, _> = library
@@ -161,6 +173,10 @@ impl View {
         self.selected_sources
             .retain(|id| self.library.sources.iter().any(|s| s.id == *id));
         self.source_groups = groups(&self.library);
+        self.selected_sources =
+            selected_sources_for_removal(&self.source_groups, &self.selected_sources)
+                .into_iter()
+                .collect();
         self.expanded_sources
             .retain(|uri| self.source_groups.iter().any(|group| &group.uri == uri));
         let mut rows = Vec::new();
@@ -353,13 +369,8 @@ impl View {
             "confirm-remove-sources" if !state.get_source_busy() => {
                 // Freeze the IDs at confirmation time; a subsequent library
                 // refresh must never make the same row index target a new source.
-                self.pending_source_removal = self
-                    .library
-                    .sources
-                    .iter()
-                    .filter(|s| self.selected_sources.contains(&s.id))
-                    .map(|s| s.id)
-                    .collect();
+                self.pending_source_removal =
+                    selected_sources_for_removal(&self.source_groups, &self.selected_sources);
                 if !self.pending_source_removal.is_empty() {
                     state.set_remove_source_count(state.get_selected_source_count());
                     state.set_remove_kind("sources".into());
@@ -375,5 +386,40 @@ impl View {
         }
         self.refresh_sources();
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refreshed_groups_cannot_delete_members_of_an_unchecked_folder() {
+        // A refresh added source 3 to a previously selected two-source folder.
+        // That folder is now unchecked; only the other checked folder is shown
+        // as selected in the UI and may appear in the removal confirmation.
+        let groups = vec![
+            SourceGroup {
+                key: "first".into(),
+                uri: "file:///first".into(),
+                members: vec![1, 2, 3],
+                books: vec![],
+            },
+            SourceGroup {
+                key: "second".into(),
+                uri: "file:///second".into(),
+                members: vec![4, 5],
+                books: vec![],
+            },
+        ];
+        let mut selected = BTreeSet::from([1, 2, 4, 5]);
+        assert_eq!(selected_sources_for_removal(&groups, &selected), [4, 5]);
+        selected.insert(3);
+        assert_eq!(
+            selected_sources_for_removal(&groups, &selected),
+            [1, 2, 3, 4, 5]
+        );
+        selected.remove(&4);
+        assert_eq!(selected_sources_for_removal(&groups, &selected), [1, 2, 3]);
     }
 }

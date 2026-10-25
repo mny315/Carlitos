@@ -62,8 +62,8 @@ fn suite(request: &Value) -> Result<Value> {
     let root = request["root"].as_str().context("Missing fixture root")?;
     let result = scan(root, ImportMode::Books)?;
     ensure!(
-        result.drafts.len() == 3,
-        "Expected 3 books, got {}: {:?}",
+        result.drafts.len() == 4,
+        "Expected 4 books, got {}: {:?}",
         result.drafts.len(),
         result.issues
     );
@@ -122,12 +122,24 @@ fn suite(request: &Value) -> Result<Value> {
             .is_some_and(|p| std::path::Path::new(p).is_file())),
         "External cover missing"
     );
+    let standalone = result
+        .drafts
+        .iter()
+        .find(|d| d.title == "Отдельная запись")
+        .context("Standalone Opus recording missing from the collection root")?;
+    ensure!(
+        standalone.include
+            && standalone.files.len() == 1
+            && standalone.files[0].relative == "Отдельная запись.opus",
+        "Standalone Opus recording must be a separate selected book"
+    );
+    let tagged_file_uri = tagged.files[0].uri.clone();
     let media: Vec<_> = result
         .drafts
         .iter()
         .flat_map(|d| d.files.iter().cloned())
         .collect();
-    ensure!(media.len() == 14, "Expected 14 files, got {}", media.len());
+    ensure!(media.len() == 15, "Expected 15 files, got {}", media.len());
     for file in &media {
         ensure!(
             file.duration.is_some_and(|d| (900..=1400).contains(&d)),
@@ -156,7 +168,7 @@ fn suite(request: &Value) -> Result<Value> {
     let mut store = Store::open(&database)?;
     let mut library = store.import(result.drafts.clone())?;
     ensure!(
-        library.media.len() == 14 && library.books.len() == 3 && library.parts.len() == 14,
+        library.media.len() == 15 && library.books.len() == 4 && library.parts.len() == 15,
         "Initial import counts"
     );
     let book = library
@@ -214,7 +226,7 @@ fn suite(request: &Value) -> Result<Value> {
                 .id,
         );
     }
-    let single = store.import(scan(&media[0].uri, ImportMode::Book)?.drafts)?;
+    let single = store.import(scan(&tagged_file_uri, ImportMode::Book)?.drafts)?;
     ensure!(
         stable(&single) == before,
         "Overlapping file import changed IDs/progress"
@@ -225,7 +237,7 @@ fn suite(request: &Value) -> Result<Value> {
             .iter()
             .find(|s| {
                 crate::source::document_identity(&s.uri)
-                    == crate::source::document_identity(&media[0].uri)
+                    == crate::source::document_identity(&tagged_file_uri)
             })
             .context("Single file source missing")?
             .id,
@@ -312,13 +324,13 @@ fn suite(request: &Value) -> Result<Value> {
         .source_id;
     let removed = store.remove_source(unrelated)?;
     ensure!(
-        removed.books.len() == 2
-            && removed.media.len() == 11
+        removed.books.len() == 3
+            && removed.media.len() == 12
             && removed.progress[0].position == 640,
         "Source removal affected unrelated progress"
     );
     Ok(
-        json!({"files": media, "checks": ["tags and covers", "Nero/QuickTime chapters", "disc/track/natural order",
+        json!({"files": media, "checks": ["standalone Opus book in collection root", "tags and covers", "Nero/QuickTime chapters", "disc/track/natural order",
         "damaged file isolation", "repeat import", "overlapping child sources", "cancel", "atomic relocation",
         "child and parent rescan", "source deletion", "reopen checkpoint 640 ms"], "library": snapshot(&removed)}),
     )

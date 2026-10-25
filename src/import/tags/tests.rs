@@ -109,6 +109,10 @@ fn fixtures(root: &Path) -> Result<()> {
         std::fs::write(natural.join(name), bytes)?;
     }
     std::fs::write(natural.join("cover.png"), image.into_inner())?;
+    std::fs::write(
+        root.join("Отдельная запись.opus"),
+        include_bytes!("../../../tests/fixtures/import.opus"),
+    )?;
     std::fs::write(formats.join("Повреждённый.mp3"), b"not an audio file")?;
     Ok(())
 }

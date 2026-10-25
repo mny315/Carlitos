@@ -36,6 +36,26 @@ pub fn has_local_network() -> Result<bool> {
         .call_static_method(class, "hasLocalNetwork", "()Z", &[])?
         .z()?)
 }
+pub fn visualizer_enabled(enabled: bool) -> Result<()> {
+    let bridge = BRIDGE.get().context("Android bridge not initialized")?;
+    let mut env = bridge.vm.attach_current_thread()?;
+    let class: &JClass<'_> = bridge.class.as_obj().into();
+    env.call_static_method(
+        class,
+        "setVisualizerEnabled",
+        "(Z)V",
+        &[JValue::Bool(enabled.into())],
+    )?;
+    Ok(())
+}
+pub fn voice_bands() -> Result<u32> {
+    let bridge = BRIDGE.get().context("Android bridge not initialized")?;
+    let mut env = bridge.vm.attach_current_thread()?;
+    let class: &JClass<'_> = bridge.class.as_obj().into();
+    Ok(env
+        .call_static_method(class, "voiceBands", "()J", &[])?
+        .j()? as u32)
+}
 fn send(command: Command) {
     if let Some(sender) = SENDER.get() {
         let _ = sender.send(command);

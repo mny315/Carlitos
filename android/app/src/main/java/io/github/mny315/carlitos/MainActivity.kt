@@ -2,6 +2,9 @@ package io.github.mny315.carlitos
 
 import android.app.NativeActivity
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Build
 import android.content.res.Configuration
@@ -14,12 +17,30 @@ import java.util.concurrent.Executors
 import com.google.zxing.integration.android.IntentIntegrator
 
 class MainActivity : NativeActivity() {
+    private var resumed = false
+    private var screenReceiver: BroadcastReceiver? = null
     private var backCallback: OnBackInvokedCallback? = null
     private val pickerOwners = mutableMapOf<Int, String>()
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         for (code in 1..4) state?.getString("carlitos.pickerOwner.$code")?.let { pickerOwners[code] = it }
         Bridge.activity = WeakReference(this)
+        screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                    VoiceLevel.foreground = false
+                    Bridge.emit("hidden", "value" to true)
+                } else reportVisibility()
+            }
+        }.also { receiver ->
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
+            else registerReceiver(receiver, filter)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             backCallback = OnBackInvokedCallback { Bridge.emit("back") }.also {
                 onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, it)
@@ -34,8 +55,26 @@ class MainActivity : NativeActivity() {
         super.onResume()
         Bridge.activity = WeakReference(this)
         reportConfiguration(resources.configuration)
-        Bridge.emit("hidden", "value" to false)
+        resumed = true
+        reportVisibility()
         updateFrameRate()
+    }
+    override fun onPause() {
+        resumed = false
+        reportVisibility()
+        super.onPause()
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        reportVisibility()
+    }
+    private fun reportVisibility() {
+        val power = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val visible = resumed && hasWindowFocus() && power.isInteractive && !keyguard.isKeyguardLocked
+        // Gate the audio observer synchronously, before Rust's UI wakeup.
+        VoiceLevel.foreground = visible
+        Bridge.emit("hidden", "value" to !visible)
     }
     override fun onPostResume() {
         super.onPostResume()
@@ -66,10 +105,13 @@ class MainActivity : NativeActivity() {
         updateFrameRate(holder.surface)
     }
     override fun onStop() {
+        VoiceLevel.foreground = false
         Bridge.emit("hidden", "value" to true)
         super.onStop()
     }
     override fun onDestroy() {
+        screenReceiver?.let { unregisterReceiver(it) }
+        screenReceiver = null
         if (Build.VERSION.SDK_INT >= 33) backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
         if (Bridge.activity.get() === this) Bridge.activity.clear()
         super.onDestroy()

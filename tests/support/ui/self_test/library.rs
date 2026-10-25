@@ -221,8 +221,8 @@ pub(super) fn step(
                 "parent source includes nested books",
             );
             check(
-                s.get_sources().row_data(1).unwrap().detail == "1 книга",
-                "single-book sources use the singular form",
+                s.get_sources().row_count() == 1 && s.get_source_folder_count() == 1,
+                "nested book sources are presented as one collection",
             );
             snapshot(&w, "sources");
             super::super::sources::selection_checks(&w, view);

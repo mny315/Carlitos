@@ -103,6 +103,7 @@ component SettingsContent inherits VerticalLayout {
             previewed => { State.display-settings-preview(); }
             committed => { State.settings-changed(); }
         }
+        Toggle { text: Theme.t("Живой фон", "Animated background"); description: Theme.t("Размытые полосы реагируют на голос. На паузе и при выключенном экране анимация останавливается.", "Blurred bars respond to the voice. Animation stops when paused or the screen is off."); checked <=> State.animated-background; toggled => { State.settings-changed(); } }
         Label { text: Theme.t("ПОВЕДЕНИЕ", "BEHAVIOR"); color: Theme.muted; font-size: (11px) * Theme.font-scale; }
         if !State.android: Toggle { text: Theme.t("Закрывать в трей", "Close to tray"); description: Theme.t("При наличии трея окно скрывается в него.", "Hides the window in the system tray when available."); checked <=> State.close-to-tray; toggled => { State.settings-changed(); } }
         Toggle { text: Theme.t("Отключить анимации", "Disable animations"); description: Theme.t("Убирает плавные переходы страниц, меню, цветов и плеера.", "Turns off smooth page, menu, color and player transitions."); checked <=> Theme.reduced-motion; toggled => { State.settings-changed(); } }
@@ -187,7 +188,10 @@ component SettingsContent inherits VerticalLayout {
 }
 
 export component SettingsPage inherits Rectangle {
+    // A scroll ends editing; layout/keyboard resizing alone must keep focus.
+    scroll-focus := FocusScope { }
     if !State.android: desktop-scroll := ScrollView {
+        scrolled => { scroll-focus.focus(); }
         content-width: self.visible-width;
         content-height: max(self.visible-height, desktop-content.preferred-height);
         desktop-content := SettingsContent {
@@ -198,6 +202,7 @@ export component SettingsPage inherits Rectangle {
     if State.android: Rectangle {
         scroll := Flickable {
             width: parent.width; height: parent.height;
+            flicked => { scroll-focus.focus(); }
             // Scaling changes the logical pointer coordinates. Once a slider
             // owns the gesture, those changes must not start a vertical scroll.
             interactive: !State.display-settings-dragging;

@@ -16,6 +16,7 @@ import java.io.File
 @UnstableApi
 internal class UiSuite(val instrumentation: Instrumentation) {
     private external fun nativeRequest(request: String): String
+    external fun nativeBackdropFrames(): Long
     internal val output get() = File(instrumentation.targetContext.getExternalFilesDir(null), "ui").apply { mkdirs() }
     fun main(action: () -> Unit) {
         var result: Result<Unit>? = null

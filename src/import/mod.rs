@@ -61,7 +61,7 @@ pub fn identity(path: &Path) -> Result<String> {
 }
 pub(crate) fn is_audio(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-        ["mp3", "flac", "wav", "wave", "m4a", "m4b", "aac"]
+        ["mp3", "flac", "wav", "wave", "m4a", "m4b", "aac", "opus"]
             .contains(&e.to_ascii_lowercase().as_str())
     })
 }

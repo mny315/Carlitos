@@ -41,8 +41,8 @@ let
       '';
       meta.license = lib.licenses.lgpl2Plus;
     };
-  base = plugins "base" [ pkgs.alsa-lib ] [
-    "alsa" "audioconvert" "audioresample" "playback" "typefind" "volume"
+  base = plugins "base" [ pkgs.alsa-lib pkgs.libogg pkgs.libopus ] [
+    "alsa" "audioconvert" "audioresample" "ogg" "opus" "playback" "typefind" "volume"
   ] [ ];
   good = plugins "good" [ base pkgs.flac pkgs.libmpg123 pkgs.libpulseaudio pkgs.libjpeg pkgs.libpng ] [
     "audiofx" "audioparsers" "autodetect" "flac" "id3demux" "isomp4"

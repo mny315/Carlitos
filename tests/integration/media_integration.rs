@@ -75,6 +75,7 @@ fn codecs_seeks_import_resume_and_relocation() -> anyhow::Result<()> {
         "sample.aac",
         "sample.m4a",
         "sample.m4b",
+        "sample.opus",
         "he-aac-v1.m4b",
         "he-aac-v2.m4b",
     ] {

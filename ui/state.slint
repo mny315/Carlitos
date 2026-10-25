@@ -3,6 +3,7 @@ export struct PartItem { key: string, title: string, detail: string, number: str
 export struct ImportItem { title: string, author: string, detail: string, included: bool }
 export struct SourceItem { key: string, title: string, path: string, detail: string, selected: bool, expanded: bool, animating: bool, child: bool, book-key: string }
 export struct SyncPeer { key: string, name: string, online: bool }
+export struct VoiceBands { bass: float, body: float, clarity: float, air: float }
 import { Theme } from "components/theme.slint";
 export global State {
     in-out property <bool> local-sync;
@@ -63,6 +64,13 @@ export global State {
     in-out property <int> book-count;
     in-out property <BookItem> selected;
     in-out property <BookItem> current;
+    in-out property <image> backdrop-glow;
+    in-out property <bool> animated-background: true;
+    in-out property <bool> ui-visible: true;
+    out property <bool> backdrop-running: animated-background && active && playing && !playback-loading && ui-visible && !Theme.reduced-motion;
+    callback backdrop-active(bool);
+    callback voice-bands() -> VoiceBands;
+    changed backdrop-running => { backdrop-active(backdrop-running); }
     in-out property <bool> active: false;
     in-out property <bool> playing: false;
     in-out property <bool> seekable: false;
@@ -87,6 +95,20 @@ export global State {
     in-out property <bool> previous-enabled;
     in-out property <bool> next-enabled;
     in-out property <string> notice;
+    in-out property <bool> notice-timed;
+    private property <duration> notice-start;
+    out property <float> notice-remaining: notice-timed && notice != "" ? clamp(1 - (animation-tick() - notice-start) / 5s, 0, 1) : 0;
+    public function start-notice-timeout() {
+        notice-start = animation-tick();
+        notice-timed = notice != "";
+    }
+    public function dismiss-notice() {
+        notice-timed = false;
+        notice = "";
+    }
+    public function finish-notice-timeout() {
+        if (notice-remaining <= 0) { dismiss-notice(); }
+    }
     in-out property <string> import-path;
     in-out property <string> import-folder-name;
     in-out property <bool> import-file;

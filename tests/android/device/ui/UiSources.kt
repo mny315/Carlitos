@@ -16,7 +16,7 @@ internal fun UiSuite.sourceSelectionChecks() {
             .put("album", "Source $index").put("track", JSONObject.NULL).put("disc", JSONObject.NULL)
             .put("cover", JSONObject.NULL).put("sort_tags_read", true).put("chapters", JSONArray())
         PlaybackSuite(instrumentation).call("fixture", "root" to root.toURI().toString(),
-            "title" to "Selection $index", "files" to JSONArray().put(media))
+            "title" to "Selection $index", "files" to JSONArray().put(media), "folder" to true)
         file
     }
     call("page", "value" to 4)
@@ -28,10 +28,10 @@ internal fun UiSuite.sourceSelectionChecks() {
     val before = sources().size
     val selected = sources().filter { row -> files.take(2).any { it.parent == row.getString("path").trimEnd('/') } }
     fun selectTwo() {
-        for (row in selected) tap("Select source: ${row.getString("path")}", "Checkbox")
+        for (row in selected) tap("Select folder: ${File(row.getString("path")).name}", "Checkbox")
         check(call().getInt("selected_source_count") == 2)
     }
-    tap("Select sources")
+    tap("Select folders")
     check(call().getBoolean("source_selection") && call().getInt("selected_source_count") == 0)
     tap("Select all", "Checkbox")
     check(call().getInt("selected_source_count") == before)
@@ -42,26 +42,26 @@ internal fun UiSuite.sourceSelectionChecks() {
     recreate()
     eventually("Source selection restored") { call().getBoolean("source_selection") && call().getInt("selected_source_count") == 2 }
     check(sources().filter { it.getBoolean("selected") }.map { it.getString("key") }.toSet() == selected.map { it.getString("key") }.toSet())
-    tap("Remove selected")
+    tap("Remove selected folders")
     check(call().getInt("overlay") == 1 && call().getInt("remove_source_count") == 2)
     capture("sources-selection-confirmation")
     tap("Cancel")
     check(call().getInt("selected_source_count") == 2 && sources().size == before)
-    tap("Remove selected")
+    tap("Remove selected folders")
     back()
     check(call().getBoolean("source_selection") && call().getInt("overlay") == 0)
     back()
     check(call().getInt("page") == 4 && !call().getBoolean("source_selection"))
-    tap("Select sources")
+    tap("Select folders")
     selectTwo()
-    tap("Remove selected")
+    tap("Remove selected folders")
     tap("Remove")
     eventually("Only selected sources removed") { sources().size == before - 2 && !call().getBoolean("source_selection") }
     check(sources().none { row -> selected.any { it.getString("key") == row.getString("key") } })
     check(sources().any { it.getString("path").trimEnd('/') == files.last().parent })
-    tap("Select sources")
+    tap("Select folders")
     tap("Select all", "Checkbox")
-    tap("Remove selected")
+    tap("Remove selected folders")
     tap("Remove")
     eventually("All sources removed") { sources().isEmpty() && !call().getBoolean("source_selection") }
     files.forEachIndexed { index, file -> check(file.readText() == "Original audio ${index + 1}") { "Source removal must never delete audio files" } }

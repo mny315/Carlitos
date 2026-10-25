@@ -174,7 +174,7 @@ impl View {
                 self.apply_settings();
             }
             Event::Notice(message) => {
-                self.notice_timer.stop();
+                state.set_notice_timed(false);
                 if state.get_overlay() == 2 {
                     state.set_edit_cover_error(message.clone().into());
                 }
@@ -193,12 +193,12 @@ impl View {
                 }
                 state.set_source_error("".into());
                 state.set_notice(message.into());
-                self.expire_notice();
+                state.invoke_start_notice_timeout();
             }
             Event::Imported => {
                 state.set_page(0);
                 state.set_selected_draft(-1);
-                self.expire_notice();
+                state.invoke_start_notice_timeout();
             }
             Event::BookEdited(id) => {
                 if state.get_overlay() == 2 && state.get_edit_key() == id.to_string() {
@@ -226,11 +226,13 @@ impl View {
             }
             Event::Show => {
                 self.hidden = false;
+                state.set_ui_visible(true);
                 let _ = w.show();
                 self.refresh_playback();
             }
             Event::Hidden(hidden) => {
                 self.hidden = hidden;
+                state.set_ui_visible(!hidden);
                 if hidden {
                     #[cfg(not(target_os = "android"))]
                     let _ = w.hide();

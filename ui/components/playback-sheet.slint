@@ -12,33 +12,33 @@ export component PlaybackSheet inherits Rectangle {
     callback done;
     preferred-height: content.preferred-height;
     background: Theme.surface;
-    border-radius: 24px;
+    border-radius: 16px;
     border-width: 1px;
     border-color: Theme.line;
     // Consume taps on the panel's padding as well as its controls.
     TouchArea { }
     content := VerticalLayout {
-        padding: 20px; spacing: 20px;
-        HorizontalLayout { spacing: 12px;
+        padding: 12px; spacing: 8px;
+        HorizontalLayout { spacing: 8px;
             Rectangle {
-                width: 40px; height: 40px; border-radius: 12px; background: Theme.tint;
+                width: 28px; height: 28px;
                 Image {
-                    x: 9px; y: 9px; width: 22px; height: 22px;
+                    x: 4px; y: 4px; width: 20px; height: 20px;
                     source: root.speed ? @image-url("../icons/play.svg") : State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg");
                     colorize: Theme.accent;
                 }
             }
             Label {
                 text: root.speed ? Theme.t("Скорость воспроизведения", "Playback speed") : Theme.t("Громкость", "Volume");
-                font-size: 20px * Theme.font-scale; font-weight: 600; wrap: word-wrap;
+                font-size: 16px * Theme.font-scale; font-weight: 600; wrap: word-wrap;
             }
         }
         ScrollView {
             preferred-height: controls.preferred-height;
             min-height: 0px;
             content-width: self.width;
-            controls := VerticalLayout { spacing: 16px;
-                HorizontalLayout { spacing: 12px;
+            controls := VerticalLayout { spacing: 4px;
+                HorizontalLayout { spacing: 8px;
                     Action {
                         text: "−"; min-width: 52px;
                         accessible-label: root.speed ? Theme.t("Медленнее", "Slower") : Theme.t("Тише", "Lower volume");
@@ -47,7 +47,7 @@ export component PlaybackSheet inherits Rectangle {
                     }
                     Label {
                         text: root.speed ? round(State.rate * 100) / 100 + "×" : round(State.volume * 100) + "%";
-                        font-size: min(40px * Theme.font-scale, (root.width - 168px) / 3.4); font-weight: 600; color: Theme.accent; horizontal-alignment: center;
+                        font-size: min(28px * Theme.font-scale, (root.width - 144px) / 3.4); font-weight: 600; color: Theme.accent; horizontal-alignment: center;
                     }
                     Action {
                         text: "+"; min-width: 52px;
@@ -68,7 +68,13 @@ export component PlaybackSheet inherits Rectangle {
                         Label { text: root.speed ? "3×" : "100%"; color: Theme.muted; font-size: 12px * Theme.font-scale; horizontal-alignment: right; }
                     }
                 }
-                if root.speed: VerticalLayout { spacing: 8px;
+                if root.speed && root.width >= 360px * Theme.font-scale: HorizontalLayout { spacing: 6px;
+                    for rate in [1, 1.25, 1.5, 2]: Action {
+                        fill: true; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001;
+                        clicked => { State.set-rate(rate); }
+                    }
+                }
+                if root.speed && root.width < 360px * Theme.font-scale: VerticalLayout { spacing: 4px;
                     for rates in [[1, 1.25], [1.5, 2]]: HorizontalLayout { spacing: 8px;
                         for rate in rates: Action {
                             fill: true; centered: true; text: rate + "×"; selected: abs(State.rate - rate) < 0.001;

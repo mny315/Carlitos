@@ -68,6 +68,8 @@ export component Action inherits Rectangle {
     in property <bool> custom-touch: false;
     in property <bool> custom-pressed: false;
     private property <bool> pressed: custom-touch ? custom-pressed : touch.pressed;
+    // Touch feedback follows the press, which a scrolling parent can cancel.
+    private property <bool> hovered: !Theme.touch && touch.has-hover;
     // Loading can temporarily block input without dimming a working control.
     in property <bool> visual-enabled: enabled;
     in property <bool> fill: false;
@@ -75,8 +77,9 @@ export component Action inherits Rectangle {
     in property <bool> destructive: false;
     private property <color> foreground: !visual-enabled ? Theme.muted : primary ? Theme.on-accent : destructive ? Theme.danger : selected ? Theme.accent : Theme.text;
     in property <int> font-weight: primary ? 600 : 400;
+    in property <string> haptic-kind: "button";
     callback clicked;
-    public function activate() { focus.focus(); Theme.haptic("button"); root.clicked(); }
+    public function activate() { focus.focus(); Theme.haptic(root.haptic-kind); root.clicked(); }
     height: Theme.action-height;
     horizontal-stretch: fill ? 1 : 0;
     min-width: icon.width > 0 ? (Theme.touch ? 48px : 40px) : 60px;
@@ -87,7 +90,7 @@ export component Action inherits Rectangle {
     border-radius: 9px;
     border-width: !Theme.touch && focus.has-focus ? 2px : 1px;
     border-color: !Theme.touch && focus.has-focus ? Theme.accent : primary || selected || quiet ? transparent : Theme.line;
-    background: !visual-enabled ? Theme.surface : primary ? (pressed ? Theme.accent.darker(12%) : touch.has-hover ? Theme.accent.brighter(8%) : Theme.accent) : selected ? Theme.tint : pressed ? Theme.line : touch.has-hover ? Theme.raised : quiet ? transparent : Theme.surface;
+    background: !visual-enabled ? Theme.surface : primary ? (pressed ? Theme.accent.darker(12%) : hovered ? Theme.accent.brighter(8%) : Theme.accent) : selected ? Theme.tint : pressed ? Theme.line : hovered ? Theme.raised : quiet ? transparent : Theme.surface;
     opacity: visual-enabled ? 1 : 0.45;
     animate background { duration: Theme.control-motion; }
     accessible-role: button;
@@ -157,7 +160,7 @@ export component Toggle inherits Rectangle {
     border-radius: 8px;
     border-width: !Theme.touch && focus.has-focus ? 2px : 0px;
     border-color: Theme.accent;
-    background: touch.has-hover ? Theme.raised : transparent;
+    background: (Theme.touch ? touch.pressed : touch.has-hover) ? Theme.raised : transparent;
     animate background { duration: Theme.control-motion; }
     accessible-role: checkbox;
     accessible-label: text;
@@ -180,6 +183,7 @@ export { Meter, PercentSlider, SeekBar } from "sliders.slint";
 
 export component Cover inherits Rectangle {
     in property <image> source;
+    in property <ImageFit> fit: cover;
     in property <int> variant;
     in property <string> initials: "C";
     border-radius: 8px;
@@ -191,5 +195,8 @@ export component Cover inherits Rectangle {
         Text { text: root.initials; font-size: (min(38px, root.width * 0.35)) * Theme.font-scale; font-family: "serif"; color: #f0ecd9; horizontal-alignment: center; vertical-alignment: center; }
         Rectangle { x: parent.width * 0.25; y: parent.height * 0.79; width: parent.width * 0.5; height: 1px; background: #ffffff55; }
     }
-    if source.width > 0: Image { source: root.source; image-fit: cover; }
+    if source.width > 0: Image {
+        width: parent.width; height: parent.height;
+        source: root.source; image-fit: root.fit;
+    }
 }

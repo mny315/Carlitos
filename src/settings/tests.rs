@@ -22,6 +22,7 @@ fn atomic_roundtrip_and_validation() -> Result<()> {
         window_width: 0,
         window_height: 9999,
         skip_silence: true,
+        animated_background: false,
         playback_rate: 1.75,
         text_scale: 1.23,
         android_ui_scale: 0.87,
@@ -34,6 +35,7 @@ fn atomic_roundtrip_and_validation() -> Result<()> {
     assert!(warning.is_none() && writable);
     assert_eq!((s.window_width, s.window_height), (360, 4320));
     assert!(s.skip_silence);
+    assert!(!s.animated_background);
     assert_eq!(s.playback_rate, 1.75);
     assert_eq!(s.text_scale, 1.23);
     assert_eq!(s.android_ui_scale, 0.87);
@@ -62,6 +64,7 @@ fn legacy_text_scale_is_restored_and_removed_seek_settings_are_ignored() -> Resu
         serde_json::from_str(r#"{"version":1,"text_scale":2.0,"seek_back":45,"seek_forward":60}"#)?;
     old.validate()?;
     assert!(!old.skip_silence);
+    assert!(old.animated_background);
     assert_eq!(old.library_sort, "listening");
     assert_eq!(old.library_tab, "all");
     assert_eq!(old.text_scale, 2.0);

@@ -55,7 +55,6 @@ pub struct View {
     filter: i32,
     hidden: bool,
     active_part_row: Option<usize>,
-    notice_timer: slint::Timer,
 }
 impl View {
     #[cfg(all(debug_assertions, target_os = "linux"))]
@@ -111,7 +110,6 @@ impl View {
             filter,
             hidden: false,
             active_part_row: None,
-            notice_timer: slint::Timer::default(),
         }));
         view.borrow().apply_settings();
         Self::bind(&view, window);
@@ -119,18 +117,6 @@ impl View {
     }
     pub fn send(&self, command: Command) {
         let _ = self.tx.send(command);
-    }
-    fn expire_notice(&self) {
-        let window = self.window.clone();
-        self.notice_timer.start(
-            slint::TimerMode::SingleShot,
-            std::time::Duration::from_secs(5),
-            move || {
-                if let Some(window) = window.upgrade() {
-                    window.global::<State>().set_notice("".into());
-                }
-            },
-        );
     }
     pub fn close(&self, tray: bool) {
         if self.settings.close_to_tray {

@@ -9,8 +9,28 @@ pub(super) fn selection_checks(
     window: &AppWindow,
     view: &std::rc::Weak<std::cell::RefCell<app::view::View>>,
 ) {
+    // Explicitly tracked folders stay independent; legacy book-only siblings
+    // are intentionally presented as one recovered collection.
+    let original = app::demo_library();
+    let mut fixture = original.clone();
+    fixture
+        .sources
+        .retain(|source| fixture.books.iter().any(|book| book.source_id == source.id));
+    fixture.folder_sources = fixture.sources.iter().map(|source| source.id).collect();
+    view.upgrade()
+        .unwrap()
+        .borrow_mut()
+        .event(app::Event::Library(Box::new(fixture.clone())));
     let state = window.global::<State>();
     let keys: Vec<_> = state.get_sources().iter().map(|s| s.key).collect();
+    check(
+        keys.len() > 1
+            && state
+                .get_sources()
+                .iter()
+                .all(|source| source.detail == "1 книга"),
+        "independent single-book folders use the singular form",
+    );
     state.invoke_action("select-sources".into(), "".into());
     check(
         state.get_source_selection() && state.get_selected_source_count() == 0,
@@ -23,7 +43,7 @@ pub(super) fn selection_checks(
         state.get_selected_source_count() == 2,
         "two independent sources can be selected",
     );
-    let mut reordered = app::demo_library();
+    let mut reordered = fixture.clone();
     reordered.sources.reverse();
     view.upgrade()
         .unwrap()
@@ -38,6 +58,34 @@ pub(super) fn selection_checks(
             && state.get_selected_source_count() == 2,
         "selection follows source IDs across reordered library snapshots",
     );
+    let mut enlarged = fixture.clone();
+    let root = enlarged
+        .sources
+        .iter()
+        .find(|source| source.id.to_string() == keys[0].as_str())
+        .and_then(|source| carlitos::library::local_path(&source.uri))
+        .unwrap();
+    enlarged.sources.push(carlitos::library::Source {
+        id: 999,
+        uri: carlitos::library::file_uri(&root.join("new-source")).unwrap(),
+    });
+    view.upgrade()
+        .unwrap()
+        .borrow_mut()
+        .event(app::Event::Library(Box::new(enlarged)));
+    check(
+        state.get_selected_source_count() == 1,
+        "a changed folder does not silently select newly discovered sources",
+    );
+    view.upgrade()
+        .unwrap()
+        .borrow_mut()
+        .event(app::Event::Library(Box::new(fixture.clone())));
+    check(
+        state.get_selected_source_count() == 1,
+        "unchecked folder members cannot remain selected across refreshes",
+    );
+    state.invoke_action("select-source".into(), keys[0].clone());
     snapshot(window, "sources-selection");
     state.invoke_action("confirm-remove-sources".into(), "".into());
     check(
@@ -94,7 +142,7 @@ pub(super) fn selection_checks(
         "Back clears selection before leaving Sources",
     );
     state.invoke_action("select-source".into(), keys[0].clone());
-    let mut removed = app::demo_library();
+    let mut removed = fixture;
     removed
         .sources
         .retain(|s| s.id.to_string() != keys[0].as_str());
@@ -109,5 +157,5 @@ pub(super) fn selection_checks(
     view.upgrade()
         .unwrap()
         .borrow_mut()
-        .event(app::Event::Library(Box::new(app::demo_library())));
+        .event(app::Event::Library(Box::new(original)));
 }

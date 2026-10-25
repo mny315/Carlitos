@@ -1,0 +1,74 @@
+import { State, VoiceBands } from "../state.slint";
+import { Theme } from "theme.slint";
+
+export component BookBackdrop inherits Rectangle {
+    private property <VoiceBands> envelope;
+    private property <bool> started;
+    private property <bool> motion-allowed: State.animated-background && State.ui-visible && !Theme.reduced-motion;
+    private property <float> reveal: running && started && motion-allowed ? 1 : 0;
+    animate reveal { duration: root.motion-allowed ? 640ms : 0ms; easing: ease-in-out; }
+    private property <bool> painting: motion-allowed && (running || reveal > 0);
+    private property <[float]> centers: [0.56, 0.45, 0.61, 0.47, 0.54, 0.64, 0.43, 0.58, 0.49];
+    // Neighboring shapes follow different real frequency groups. Staggered
+    // centers keep their blurred edges from joining into one horizontal strip.
+    private property <[float]> levels: [
+        envelope.bass * 0.85,
+        envelope.clarity * 0.92,
+        envelope.body,
+        envelope.air * 0.96,
+        envelope.bass * 0.98,
+        envelope.clarity,
+        envelope.air * 0.85,
+        envelope.body * 0.92,
+        envelope.clarity * 0.86
+    ];
+    private property <[color]> colors: [#668ed4, #7e83df, #a17cc9, #be86ac, #ce9d8b, #b6a87a, #81b5a5, #66aebe, #739cdb];
+    in property <bool> running: State.backdrop-running;
+    clip: true;
+    changed running => { if (!root.running) { root.started = false; } }
+    changed painting => {
+        if (!root.painting) {
+            root.started = false;
+            root.envelope = { bass: 0, body: 0, clarity: 0, air: 0 };
+        }
+    }
+    if root.painting: Rectangle {
+        width: parent.width; height: parent.height;
+        for level[index] in root.levels: Image {
+            width: parent.width / 9 * 2.1;
+            height: parent.height * (0.1 + level * 0.9);
+            x: parent.width * (index + 0.5) / 9 - self.width / 2;
+            y: parent.height * root.centers[index] - self.height / 2;
+            source: State.backdrop-glow;
+            image-fit: fill;
+            colorize: Theme.accent.mix(root.colors[index], 0.55);
+            opacity: root.reveal * (Theme.dark ? 0.56 : 0.28) * (0.15 + level * 0.85);
+        }
+        Rectangle {
+            opacity: root.reveal;
+            background: @linear-gradient(180deg, Theme.background.with-alpha(0.5) 0%, Theme.background.with-alpha(0) 38%, Theme.background.with-alpha(0.15) 65%, Theme.background.with-alpha(0.65) 100%);
+        }
+    }
+    function follow(current: float, target: float) -> float {
+        let difference = clamp(target, 0, 1) - current;
+        return abs(difference) < 0.01 ? current : clamp(current + clamp(difference * (difference > 0 ? 0.48 : 0.24), -0.065, 0.11), 0, 1);
+    }
+    // Voice sampling stays at 12.5 Hz. Only the brief start/stop fade uses
+    // property animation; paused/hidden UI and disabled motion do no work.
+    Timer {
+        interval: 80ms;
+        running: root.painting;
+        triggered => {
+            let voice = root.running ? State.voice-bands() : { bass: 0, body: 0, clarity: 0, air: 0 };
+            if (root.running && max(max(voice.bass, voice.body), max(voice.clarity, voice.air)) > 0) {
+                root.started = true;
+            }
+            root.envelope = {
+                bass: root.follow(root.envelope.bass, voice.bass),
+                body: root.follow(root.envelope.body, voice.body),
+                clarity: root.follow(root.envelope.clarity, voice.clarity),
+                air: root.follow(root.envelope.air, voice.air)
+            };
+        }
+    }
+}

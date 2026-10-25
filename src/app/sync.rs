@@ -158,8 +158,9 @@ impl Controller {
         self.save()?;
         let active = self.active_book();
         let library = self.library.clone();
-        let (library, changed) = self.store()?.merge_sync(&library, &records)?;
-        let rate_changes = self.store()?.merge_sync_rates(&library, &rates)?;
+        let (library, changed, rate_changes) = self
+            .store()?
+            .merge_sync_exchange(&library, &records, &rates)?;
         if changed.is_empty() && rate_changes.is_empty() {
             return Ok(());
         }

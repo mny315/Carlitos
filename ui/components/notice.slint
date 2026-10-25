@@ -4,7 +4,10 @@ import { Action, Label } from "controls.slint";
 
 export component NoticeBanner inherits Rectangle {
     in property <string> text;
+    in property <length> top-gap;
     in property <length> bottom-gap: 12px;
+    in property <bool> timed;
+    in property <float> remaining;
     private property <string> shown-text;
     private property <float> reveal: text != "" ? 1 : 0;
     animate reveal { duration: Theme.reduced-motion ? 0ms : 220ms; easing: ease-in-out; }
@@ -13,19 +16,20 @@ export component NoticeBanner inherits Rectangle {
     // Measure the text, not the ScrollView's preferred size. A short notice
     // takes one compact row; longer messages remain readable by scrolling.
     private property <length> card-height: max(Theme.touch ? 48px : 36px, min(72px * Theme.font-scale, message.preferred-height) + 12px);
-    height: reveal * (card-height + bottom-gap);
+    height: reveal * (top-gap + card-height + bottom-gap);
     opacity: reveal;
     visible: reveal > 0;
     clip: true;
     accessible-role: groupbox;
     accessible-label: Theme.t("Уведомление", "Notification");
     Rectangle {
-        x: 0px; y: 0px;
+        x: 0px; y: root.top-gap;
         width: root.width; height: root.card-height;
         background: Theme.tint; border-radius: 8px;
+        border-width: 1px; border-color: Theme.line;
     }
     ScrollView {
-        x: 12px; y: 6px;
+        x: 12px; y: root.top-gap + 6px;
         width: root.width - 12px - dismiss.width;
         height: root.card-height - 12px;
         content-width: self.width;
@@ -36,8 +40,22 @@ export component NoticeBanner inherits Rectangle {
             font-size: 13px * Theme.font-scale;
         }
     }
+    if root.timed && root.text != "": Rectangle {
+        x: 12px; y: root.top-gap + root.card-height - 5px;
+        width: max(0px, root.width - 24px); height: 3px;
+        border-radius: 1.5px; background: Theme.line;
+        accessible-role: progress-indicator;
+        accessible-label: Theme.t("До закрытия уведомления", "Notification time remaining");
+        accessible-value: round(root.remaining * 100);
+        accessible-value-minimum: 0;
+        accessible-value-maximum: 100;
+        Rectangle {
+            width: parent.width * clamp(root.remaining, 0, 1); height: parent.height;
+            border-radius: 1.5px; background: Theme.accent;
+        }
+    }
     dismiss := Action {
-        x: root.width - self.width; y: (root.card-height - self.height) / 2;
+        x: root.width - self.width; y: root.top-gap + (root.card-height - self.height) / 2;
         width: Theme.touch ? 48px : 40px;
         height: Theme.touch ? 48px : 32px;
         icon: @image-url("../icons/close.svg");

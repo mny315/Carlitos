@@ -68,7 +68,11 @@ export component BookPage inherits Rectangle {
             ListView {
                 vertical-scrollbar-policy: State.android ? ScrollBarPolicy.always-off : ScrollBarPolicy.as-needed;
                 for part in State.parts: Rectangle {
-                    height: max(State.android ? 64px : 54px, Theme.body * 2 + 16px); border-radius: 8px; background: part.active ? Theme.tint : transparent;
+                    height: max(State.android ? 64px : 54px, Theme.body * 2 + 16px);
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: part.active ? Theme.accent.with-alpha(0.28) : transparent;
+                    background: part.active ? Theme.accent.with-alpha(0.06) : transparent;
                     animate background { duration: Theme.control-motion; }
                     HorizontalLayout { padding: 8px; spacing: 10px;
                         Rectangle {
@@ -88,7 +92,8 @@ export component BookPage inherits Rectangle {
                         if State.reorder && !part.chapter: Action { icon: @image-url("../icons/down.svg"); quiet: true; accessible-label: Theme.t("Ниже", "Move down"); clicked => { State.action("part-down", part.key); } }
                         if !State.reorder: Action {
                             icon: part.active && State.playing ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg");
-                            quiet: true; selected: part.active;
+                            haptic-kind: "playback";
+                            quiet: true;
                             accessible-label: (part.active ? State.playing ? Theme.t("Пауза: ", "Pause: ") : Theme.t("Продолжить: ", "Continue: ") : Theme.t("Слушать: ", "Play: ")) + part.title;
                             clicked => { State.action(part.active ? "toggle" : "part", part.key); }
                         }

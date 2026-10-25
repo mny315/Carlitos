@@ -29,7 +29,10 @@ internal fun UiSuite.displayScaleChecks() {
     percentSteps("Text size", "text_size_percent", 205)
     tap("Reset: Text size")
     check(element("Text size", "Slider").getDouble("value") == 100.0) { "Reset must also move the thumb" }
-    tap("Text size (%)", "Spinbox")
+    // The center can land between the input and the increment button.
+    val input = element("Text size (%)", "Spinbox")
+    tapAt(input.getDouble("x") + 22, input.getDouble("y") + input.getDouble("h") / 2)
+    eventually("Exact size input focused") { call().getBoolean("keyboard") }
     instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_MOVE_END)
     repeat(3) { instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DEL) }
     instrumentation.sendStringSync("123")

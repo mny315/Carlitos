@@ -43,29 +43,52 @@ internal fun UiSuite.feedbackChecks() {
     first.recycle(); second.recycle()
     capture("scanning-indicator")
     call("feedback", "kind" to "scan-done")
-    call("feedback", "kind" to "imported")
-    Thread.sleep(300)
-    val notice = element("Notification", "Groupbox")
-    val height = notice.getDouble("h")
-    check(height <= 60.1) { "Short notice must be compact: $height" }
-    check(notice.getDouble("y") < call().getDouble("height") * .2) { "Notice must stay at the top: $notice" }
-    val dismiss = element("Dismiss message")
-    check(dismiss.getDouble("w") == 48.0 &&
-        kotlin.math.abs(dismiss.getDouble("x") + dismiss.getDouble("w") - notice.getDouble("x") - notice.getDouble("w")) < .1) {
-        "Dismiss button must leave room for text and stay at the right: $dismiss"
+    for ((theme, name) in listOf(0 to "dark", 1 to "light")) {
+        call("appearance", "theme" to theme)
+        call("feedback", "kind" to "imported")
+        Thread.sleep(300)
+        val notice = element("Notification", "Groupbox")
+        val height = notice.getDouble("h")
+        check(height <= 72.1) { "Short notice including its gaps must be compact: $height" }
+        check(notice.getDouble("y") < call().getDouble("height") * .2) { "Notice must stay at the top: $notice" }
+        val dismiss = element("Dismiss message")
+        check(dismiss.getDouble("y") - notice.getDouble("y") >= 11.9) {
+            "Notification card needs a 12 dp gap below the header: $dismiss / $notice"
+        }
+        check(dismiss.getDouble("w") == 48.0 &&
+            kotlin.math.abs(dismiss.getDouble("x") + dismiss.getDouble("w") - notice.getDouble("x") - notice.getDouble("w")) < .1) {
+            "Dismiss button must leave room for text and stay at the right: $dismiss"
+        }
+        val progress = element("Notification time remaining", "ProgressIndicator")
+        check(progress.getDouble("h") == 3.0 && progress.getDouble("w") > 100)
+        val initial = call().getDouble("notice_remaining")
+        check(initial > .8 && initial < 1)
+        capture("import-notice-$name")
+        Thread.sleep(1100)
+        check(call().getDouble("notice_remaining") < initial - .2) { "Countdown must decrease" }
+        capture("import-notice-$name-countdown")
+        // A repeated completion must restart even when the text is unchanged.
+        check(call("feedback", "kind" to "imported").getDouble("notice_remaining") > .95)
+        eventually("Import notification times out") { call().getString("notice").isEmpty() }
+        check(!call().getBoolean("notice_timed"))
+        Thread.sleep(300)
+        check(elements().none { it.optString("label") == "Notification" && it.getDouble("h") > .1 })
+        call("feedback", "kind" to "updated")
+        Thread.sleep(300)
+        call("feedback", "kind" to "dismiss")
+        Thread.sleep(70)
+        val fading = element("Notification", "Groupbox").getDouble("h")
+        check(fading > 0 && fading < height) { "Notification must collapse smoothly: $fading" }
+        Thread.sleep(300)
+        check(elements().none { it.optString("label") == "Notification" && it.getDouble("h") > .1 })
     }
-    capture("import-notice")
-    eventually("Import notification times out") { call().getString("notice").isEmpty() }
-    Thread.sleep(300)
-    check(elements().none { it.optString("label") == "Notification" && it.getDouble("h") > .1 })
     call("feedback", "kind" to "updated")
-    Thread.sleep(300)
+    call("feedback", "kind" to "error")
+    check(!call().getBoolean("notice_timed"))
+    check(elements().none { it.optString("label") == "Notification time remaining" })
+    Thread.sleep(5200)
+    check(call().getString("notice") == "Test error") { "An old timeout must not dismiss a new error" }
     call("feedback", "kind" to "dismiss")
-    Thread.sleep(70)
-    val fading = element("Notification", "Groupbox").getDouble("h")
-    check(fading > 0 && fading < height) { "Notification must collapse smoothly: $fading" }
-    Thread.sleep(300)
-    check(elements().none { it.optString("label") == "Notification" && it.getDouble("h") > .1 })
     call("page", "value" to 0)
-    note("animated scan indicator, compact notification, timeout and smooth collapse")
+    note("animated scan indicator, notification gap and countdown in both themes, restart, timeout and smooth collapse")
 }

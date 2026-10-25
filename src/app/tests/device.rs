@@ -10,13 +10,18 @@ impl Controller {
             "fixture" => {
                 self.save()?;
                 let files: Vec<Media> = serde_json::from_value(request["files"].clone())?;
-                let library = self.store()?.import(vec![Draft {
-                    root_uri: request["root"].as_str().context("Missing root")?.into(),
+                let root = request["root"].as_str().context("Missing root")?;
+                let mut library = self.store()?.import(vec![Draft {
+                    root_uri: root.into(),
                     title: request["title"].as_str().context("Missing title")?.into(),
                     author: "Device suite".into(),
                     files,
                     include: true,
                 }])?;
+                if request["folder"].as_bool().unwrap_or(false) {
+                    self.store()?.ensure_folder(root)?;
+                    library = self.store()?.load()?;
+                }
                 self.reconcile(library);
                 None
             }

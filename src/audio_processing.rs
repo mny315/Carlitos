@@ -33,6 +33,8 @@ impl Timeline {
         sample_rate: u32,
         enabled: bool,
     ) -> Vec<i16> {
+        #[cfg(windows)]
+        crate::visualizer::observe_pcm16(pcm, channels, sample_rate);
         if !enabled {
             // Normal playback only copies complete frames; it does not need
             // the per-sample silence detector or per-frame vector extension.

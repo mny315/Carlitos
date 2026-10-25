@@ -92,6 +92,7 @@ impl Player {
         pipeline.set_property("volume", self.volume);
         pipeline.set_property("mute", self.muted);
         let (filter, silence) = crate::silence::Silence::filter(self.skip_silence)?;
+        crate::visualizer::attach(&pipeline, &filter.static_pad("src").unwrap());
         pipeline.set_property("audio-filter", &filter);
         self.silence = Some(silence);
         // Audio only: avoid video windows for containers that also contain cover art/video tracks.

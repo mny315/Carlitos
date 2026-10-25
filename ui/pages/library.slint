@@ -12,7 +12,9 @@ component BookRow inherits Rectangle {
         x: Theme.reduced-motion ? 0px : root.book.move-offset-x * (parent.width + 24px) * (1 - State.books-move-progress);
         y: Theme.reduced-motion ? 0px : (root.book.move-offset * parent.height + State.books-move-scroll-y) * (1 - State.books-move-progress);
         width: parent.width; height: parent.height; border-radius: 10px;
-        background: book-focus.has-focus || current ? Theme.tint : book-touch.has-hover ? Theme.surface : transparent;
+        background: current ? (Theme.dark ? Theme.tint : Theme.surface.mix(Theme.accent, 80%)) : book-focus.has-focus ? Theme.tint : book-touch.has-hover ? Theme.surface : transparent;
+        border-width: current ? 1px : 0px;
+        border-color: Theme.accent;
         animate background { duration: Theme.control-motion; }
         accessible-role: button;
         accessible-label: root.book.title + " · " + root.book.author + (playing ? Theme.t(" · Воспроизводится", " · Now playing") : current ? Theme.t(" · На паузе", " · Paused") : "");

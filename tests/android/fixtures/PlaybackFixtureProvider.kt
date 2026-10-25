@@ -23,6 +23,7 @@ class PlaybackFixtureProvider : ContentProvider() {
     private fun asset(id: String): String = when (id) {
         "tone", "part2", "fault" -> "tone.wav"
         "silence" -> "silence.wav"
+        "voice" -> "voice.wav"
         "pcm-16000", "pcm-44100", "pcm-96000" -> "$id.wav"
         "mp3-mono" -> "import-mono.mp3"
         "mp3-stereo" -> "import-stereo.mp3"

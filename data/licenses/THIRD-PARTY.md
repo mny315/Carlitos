@@ -7,7 +7,7 @@ official Slint attribution badge under section 2(b) of that license.
 The About screen also links to Slint.
 
 On Linux, audio is provided by a pinned, reduced GStreamer build. The packaged plugins
-cover MP3 (mpg123), FLAC, WAV and AAC/M4A/M4B (FDK-AAC), image metadata,
+cover MP3 (mpg123), FLAC, WAV, Opus in Ogg and AAC/M4A/M4B (FDK-AAC), image metadata,
 tempo adjustment, PulseAudio and ALSA. GStreamer is LGPL-2.1-or-later;
 FDK-AAC retains its Fraunhofer license, including its source-distribution and
 patent provisions. These libraries are dynamically linked and retain their

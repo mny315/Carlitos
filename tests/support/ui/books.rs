@@ -91,7 +91,8 @@ pub async fn playback_checks(window: &AppWindow, view: &Rc<RefCell<app::view::Vi
     );
     snapshot(window, "library-book-playing");
     view.borrow_mut().event(playback(false));
-    wait(200).await;
+    // The backdrop finishes its 640 ms fade after playback has stopped.
+    wait(750).await;
     let paused = first_row(window);
     wait(150).await;
     check(

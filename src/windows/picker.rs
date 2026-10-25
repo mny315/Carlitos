@@ -65,7 +65,7 @@ fn bind_picker(window: &AppWindow, picker: Picker) {
                 dialog
                     .add_filter(
                         text("Аудиокниги", "Audiobooks"),
-                        &["mp3", "m4b", "m4a", "aac", "flac", "wav", "wave"],
+                        &["mp3", "m4b", "m4a", "aac", "flac", "wav", "wave", "opus"],
                     )
                     .pick_file()
                     .await

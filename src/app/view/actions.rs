@@ -9,6 +9,14 @@ use std::{cell::RefCell, rc::Rc};
 impl View {
     pub(super) fn bind(view: &Rc<RefCell<Self>>, window: &AppWindow) {
         let state = window.global::<State>();
+        state.set_ui_visible(!cfg!(target_os = "android"));
+        state.set_backdrop_glow(crate::visualizer::glow());
+        state.on_backdrop_active(crate::visualizer::set_enabled);
+        state.on_voice_bands(|| {
+            #[cfg(all(target_os = "android", feature = "android-ui-tests"))]
+            crate::android::ui_tests::record_backdrop_sample();
+            crate::visualizer::bands()
+        });
         state.on_display_path(|uri| crate::source::display_path(uri.as_str()).into());
         let weak = Rc::downgrade(view);
         state.on_search(move |q, f| {

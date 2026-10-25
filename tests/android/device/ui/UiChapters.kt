@@ -23,7 +23,9 @@ internal fun UiSuite.chapterPlaybackChecks(title: String) {
     fun chapterTap(label: String) {
         // Each file has First/Second chapters. Pick the first file's button.
         val button = elements().first { it.getString("role").contains("Button") && it.getString("label") == label }
+        val haptics = call().getInt("haptic_buttons")
         tapAt(button.getDouble("x") + button.getDouble("w") / 2, button.getDouble("y") + button.getDouble("h") / 2)
+        eventually("Chapter button gives one haptic") { call().getInt("haptic_buttons") == haptics + 1 }
     }
     playback.call("part", "id" to part, "position" to 7000)
     eventually("Playing chapter highlighted") {
@@ -58,5 +60,5 @@ internal fun UiSuite.chapterPlaybackChecks(title: String) {
     eventually("Playback crossing a chapter boundary moves the pause button") { activeChapter(20000) && hasButton("Pause: Second") && !hasButton("Pause: First") }
     chapterTap("Pause: Second")
     eventually("Final chapter pause") { !audio().getBoolean("playing") }
-    note("chapter highlighting, play/pause, resume without restarting, chapter selection, paused seeking and automatic chapter transition")
+    note("chapter button haptics, highlighting, play/pause, resume without restarting, chapter selection, paused seeking and automatic chapter transition")
 }

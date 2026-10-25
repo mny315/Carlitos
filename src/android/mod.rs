@@ -10,7 +10,7 @@ pub(crate) mod runtime;
 pub(crate) mod ui;
 #[cfg(feature = "android-ui-tests")]
 #[path = "tests/ui.rs"]
-mod ui_tests;
+pub(crate) mod ui_tests;
 
 use crate::{State, app, settings::Settings};
 use anyhow::Result;

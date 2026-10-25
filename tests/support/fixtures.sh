@@ -3,7 +3,7 @@ set -euo pipefail
 destination="${1:?fixture directory}"
 mkdir -p "$destination/Книга с пробелом/Disc 1" "$destination/Вторая книга"
 ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'sine=frequency=440:duration=12' -ac 2 -ar 48000 "$destination/sample.wav"
-for extension in mp3 flac aac m4a m4b; do
+for extension in mp3 flac aac m4a m4b opus; do
   ffmpeg -hide_banner -loglevel error -y -i "$destination/sample.wav" -metadata title="Тест $extension" -metadata artist="Carlitos" -metadata album="Проверка" "$destination/sample.$extension"
 done
 ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'color=c=blue:s=64x64' \

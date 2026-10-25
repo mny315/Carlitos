@@ -39,12 +39,13 @@ impl Covers {
                     if stop.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    let pixels = crate::import::load_cover_image(std::path::Path::new(&path))
+                    let rgba = crate::import::load_cover_image(std::path::Path::new(&path))
                         .ok()
-                        .map(|im| {
-                            let rgba = im.thumbnail(216, 292).into_rgba8();
-                            (rgba.width(), rgba.height(), rgba.into_raw())
-                        });
+                        .map(|im| im.thumbnail(216, 292));
+                    let pixels = rgba.map(|im| {
+                        let rgba = im.into_rgba8();
+                        (rgba.width(), rgba.height(), rgba.into_raw())
+                    });
                     let palette = pixels
                         .as_ref()
                         .map_or_else(CoverPalette::default, |(_, _, bytes)| {

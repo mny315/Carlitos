@@ -50,6 +50,20 @@ pub(super) fn migrate_rates(conn: &mut Connection) -> Result<()> {
 }
 
 impl Store {
+    /// Keep received progress, speeds and their revisions in one transaction.
+    pub fn merge_sync_exchange(
+        &mut self,
+        library: &Library,
+        records: &[Record],
+        rates: &[RateRecord],
+    ) -> Result<(Library, Vec<Id>, Vec<Id>)> {
+        let index = Index::new(library, &self.fingerprints()?);
+        let tx = self.conn.transaction()?;
+        let (library, changed) = apply_sync_records(&tx, &index, library, records)?;
+        let rate_changes = apply_sync_rates(&tx, &index, rates)?;
+        tx.commit()?;
+        Ok((library, changed, rate_changes))
+    }
     pub fn book_rate(&self, book: Id) -> Result<Option<f64>> {
         Ok(self
             .conn
@@ -101,23 +115,9 @@ impl Store {
         Ok(rates)
     }
     pub fn merge_sync_rates(&mut self, library: &Library, rates: &[RateRecord]) -> Result<Vec<Id>> {
-        anyhow::ensure!(
-            rates.len() <= crate::sync::MAX_RECORDS,
-            "Too many book speeds"
-        );
-        for rate in rates {
-            rate.validate()?;
-        }
         let index = Index::new(library, &self.fingerprints()?);
         let tx = self.conn.transaction()?;
-        let mut changed = Vec::new();
-        for rate in rates {
-            for (&id, _) in index.books.iter().filter(|(_, book)| book.key == rate.book) {
-                if tx.execute("INSERT INTO book_rates VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET value=excluded.value,updated=excluded.updated,device=excluded.device WHERE (excluded.updated,excluded.device)>(book_rates.updated,book_rates.device)", params![id, rate.value, rate.updated, rate.device])? > 0 {
-                    changed.push(id);
-                }
-            }
-        }
+        let changed = apply_sync_rates(&tx, &index, rates)?;
         tx.commit()?;
         Ok(changed)
     }
@@ -199,78 +199,107 @@ impl Store {
         library: &Library,
         records: &[Record],
     ) -> Result<(Library, Vec<Id>)> {
-        anyhow::ensure!(
-            records.len() <= crate::sync::MAX_RECORDS,
-            "Too many sync records"
-        );
-        for record in records {
-            record.validate()?;
-        }
         let index = Index::new(library, &self.fingerprints()?);
-        let mut library = library.clone();
-        let mut changed = Vec::new();
         let tx = self.conn.transaction()?;
-        for record in records {
-            for (&id, book) in index.books.iter().filter(|(_, b)| b.key == record.book) {
-                let previous: Option<(i64, String)> = tx
-                    .query_row(
-                        "SELECT updated,device FROM sync_changes WHERE book_id=?1",
-                        [id],
-                        |r| Ok((r.get(0)?, r.get(1)?)),
-                    )
-                    .optional()?;
-                if previous
-                    .as_ref()
-                    .is_some_and(|(time, device)| (*time, device.as_str()) >= record.revision())
-                {
-                    continue;
-                }
-                let Some((part, _, _)) = book.parts.iter().find(|(_, hash, occurrence)| {
-                    hash == &record.part && *occurrence == record.occurrence
-                }) else {
-                    continue;
-                };
-                let duration = library
-                    .file_for(&Target::Book(*part))
-                    .and_then(|m| m.duration);
-                // Metadata durations can differ slightly between platform decoders.
-                if duration.is_some_and(|d| record.position > d.saturating_add(2_000)) {
-                    continue;
-                }
-                let active = library.session.current.as_ref().and_then(|t| match t {
-                    Target::Book(p) => library.part(*p).map(|p| p.book_id),
-                }) == Some(id);
-                if record.reset {
-                    tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
-                    if active {
-                        library.session.current = None;
-                        library.session.position = 0;
-                    }
-                } else {
-                    tx.execute("INSERT INTO book_progress VALUES(?1,?2,?3,?4,?5) ON CONFLICT(book_id) DO UPDATE SET part_id=excluded.part_id,position=excluded.position,completed=excluded.completed,updated=excluded.updated",
-                        params![id, part, record.position as i64, record.completed, record.updated])?;
-                    if active {
-                        library.session.current = Some(Target::Book(*part));
-                        library.session.position = record.position;
-                    }
-                }
-                tx.execute("INSERT INTO sync_changes VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET updated=excluded.updated,device=excluded.device,reset=excluded.reset",
-                    params![id, record.updated, record.device, record.reset])?;
-                library.progress.retain(|p| p.book_id != id);
-                if !record.reset {
-                    library.progress.push(Progress {
-                        book_id: id,
-                        part_id: *part,
-                        position: record.position,
-                        completed: record.completed,
-                        updated: record.updated,
-                    });
-                }
+        let result = apply_sync_records(&tx, &index, library, records)?;
+        tx.commit()?;
+        Ok(result)
+    }
+}
+
+fn apply_sync_rates(conn: &Connection, index: &Index, rates: &[RateRecord]) -> Result<Vec<Id>> {
+    anyhow::ensure!(
+        rates.len() <= crate::sync::MAX_RECORDS,
+        "Too many book speeds"
+    );
+    for rate in rates {
+        rate.validate()?;
+    }
+    let mut changed = Vec::new();
+    for rate in rates {
+        for (&id, _) in index.books.iter().filter(|(_, book)| book.key == rate.book) {
+            if conn.execute("INSERT INTO book_rates VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET value=excluded.value,updated=excluded.updated,device=excluded.device WHERE (excluded.updated,excluded.device)>(book_rates.updated,book_rates.device)", params![id, rate.value, rate.updated, rate.device])? > 0 {
                 changed.push(id);
             }
         }
-        save_session(&tx, &library.session)?;
-        tx.commit()?;
-        Ok((library, changed))
     }
+    Ok(changed)
+}
+
+fn apply_sync_records(
+    tx: &Connection,
+    index: &Index,
+    library: &Library,
+    records: &[Record],
+) -> Result<(Library, Vec<Id>)> {
+    anyhow::ensure!(
+        records.len() <= crate::sync::MAX_RECORDS,
+        "Too many sync records"
+    );
+    for record in records {
+        record.validate()?;
+    }
+    let mut library = library.clone();
+    let mut changed = Vec::new();
+    for record in records {
+        for (&id, book) in index.books.iter().filter(|(_, b)| b.key == record.book) {
+            let previous: Option<(i64, String)> = tx
+                .query_row(
+                    "SELECT updated,device FROM sync_changes WHERE book_id=?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            if previous
+                .as_ref()
+                .is_some_and(|(time, device)| (*time, device.as_str()) >= record.revision())
+            {
+                continue;
+            }
+            let Some((part, _, _)) = book.parts.iter().find(|(_, hash, occurrence)| {
+                hash == &record.part && *occurrence == record.occurrence
+            }) else {
+                continue;
+            };
+            let duration = library
+                .file_for(&Target::Book(*part))
+                .and_then(|m| m.duration);
+            // Metadata durations can differ slightly between platform decoders.
+            if duration.is_some_and(|d| record.position > d.saturating_add(2_000)) {
+                continue;
+            }
+            let active = library.session.current.as_ref().and_then(|t| match t {
+                Target::Book(p) => library.part(*p).map(|p| p.book_id),
+            }) == Some(id);
+            if record.reset {
+                tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
+                if active {
+                    library.session.current = None;
+                    library.session.position = 0;
+                }
+            } else {
+                tx.execute("INSERT INTO book_progress VALUES(?1,?2,?3,?4,?5) ON CONFLICT(book_id) DO UPDATE SET part_id=excluded.part_id,position=excluded.position,completed=excluded.completed,updated=excluded.updated",
+                        params![id, part, record.position as i64, record.completed, record.updated])?;
+                if active {
+                    library.session.current = Some(Target::Book(*part));
+                    library.session.position = record.position;
+                }
+            }
+            tx.execute("INSERT INTO sync_changes VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET updated=excluded.updated,device=excluded.device,reset=excluded.reset",
+                    params![id, record.updated, record.device, record.reset])?;
+            library.progress.retain(|p| p.book_id != id);
+            if !record.reset {
+                library.progress.push(Progress {
+                    book_id: id,
+                    part_id: *part,
+                    position: record.position,
+                    completed: record.completed,
+                    updated: record.updated,
+                });
+            }
+            changed.push(id);
+        }
+    }
+    save_session(tx, &library.session)?;
+    Ok((library, changed))
 }
