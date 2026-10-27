@@ -38,6 +38,8 @@ export global State {
     in-out property <int> selected-book-count;
     in-out property <bool> all-books-selected;
     in-out property <int> book-columns: 1;
+    in-out property <length> book-row-height: 84px;
+    in-out property <length> books-viewport-height;
     in-out property <length> books-scroll-y;
     in-out property <bool> books-moving;
     private property <duration> books-move-start;
@@ -45,8 +47,11 @@ export global State {
     private property <float> books-move-time: books-moving ? clamp((animation-tick() - books-move-start) / 420ms, 0, 1) : 1;
     out property <float> books-move-progress: 1 - pow(1 - books-move-time, 3);
     public function start-book-move() {
-        books-move-scroll-y = books-scroll-y + books-move-scroll-y * (1 - books-move-progress);
-        books-scroll-y = 0px;
+        start-book-move-to(0px);
+    }
+    public function start-book-move-to(target-scroll: length) {
+        books-move-scroll-y = books-scroll-y - target-scroll + books-move-scroll-y * (1 - books-move-progress);
+        books-scroll-y = target-scroll;
         books-move-start = animation-tick();
         books-moving = true;
     }

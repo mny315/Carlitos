@@ -120,7 +120,14 @@ export component LibraryPage inherits VerticalLayout {
     spacing: State.android ? 6px : State.compact ? 8px : 16px;
     private property <length> book-row-height: max(84px, 30px + Theme.body * 3.4);
     private property <int> book-columns: !State.android && self.width >= 960px * Theme.font-scale + 24px ? 2 : 1;
-    init => { State.book-columns = root.book-columns; }
+    private property <length> viewport-height: library-body.height;
+    init => {
+        State.book-columns = root.book-columns;
+        State.book-row-height = root.book-row-height;
+        State.books-viewport-height = root.viewport-height;
+    }
+    changed book-row-height => { State.book-row-height = root.book-row-height; }
+    changed viewport-height => { State.books-viewport-height = root.viewport-height; }
     changed book-columns => {
         // Keep the first visible book in view when the window changes layout.
         State.books-scroll-y = -floor(floor(max(0px, -State.books-scroll-y) / root.book-row-height) * State.book-columns / root.book-columns) * root.book-row-height;

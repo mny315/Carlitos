@@ -27,6 +27,7 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
             grantFixtures(instrumentation, ui = true)
             call("setup")
             bookSelectionChecks()
+            bookRemovalLayoutChecks()
             return
         }
         if (feedbackOnly) {
@@ -87,6 +88,7 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         }
         bookSelectionChecks()
         bookSwipeChecks(title)
+        bookRemovalLayoutChecks()
         if (libraryOnly) return
         chapterPlaybackChecks(title)
         pauseResponsivenessChecks(requireBluetooth)

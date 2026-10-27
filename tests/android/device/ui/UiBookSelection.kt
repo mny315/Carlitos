@@ -48,6 +48,7 @@ internal fun UiSuite.bookSelectionChecks() {
         (0 until rows.length()).map { rows.getJSONObject(it) }
     }
     fun hold(title: String, cancel: Boolean = false, duration: Long = 650) {
+        eventually("Book movement settled before holding") { !call().getBoolean("books_moving") }
         val area = element("Books", "TabPanel")
         val row = elements().first { it.getString("label").startsWith("$title · ") &&
             it.getDouble("y") >= area.getDouble("y") && it.getDouble("y") + it.getDouble("h") <= area.getDouble("y") + area.getDouble("h") }

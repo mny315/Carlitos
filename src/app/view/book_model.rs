@@ -51,6 +51,7 @@ impl BookModel {
         mut rows: Vec<(BookItem, Option<String>)>,
         state: &State,
         animate: bool,
+        scroll_target: f32,
     ) {
         let previous = self.rows.borrow();
         let same_order = previous.len() == rows.len()
@@ -108,9 +109,10 @@ impl BookModel {
             }
         } else {
             if animate {
-                state.invoke_start_book_move();
+                state.invoke_start_book_move_to(scroll_target);
             } else {
                 state.set_books_moving(false);
+                state.set_books_scroll_y(scroll_target);
             }
             self.notify.reset();
         }

@@ -126,7 +126,17 @@ impl View {
             });
         let current_changed =
             self.books.row_count() > 0 && current.is_some_and(|key| state.get_current().key != key);
-        let animate = current_changed
+        let remaining: std::collections::HashSet<_> = self
+            .library
+            .books
+            .iter()
+            .map(|b| b.id.to_string())
+            .collect();
+        let removed = self
+            .books
+            .iter()
+            .any(|book| !remaining.contains(book.key.as_str()));
+        let animate = (current_changed || removed)
             && state.get_page() == 0
             && !window.global::<Theme>().get_reduced_motion()
             && !self.hidden;
@@ -164,8 +174,17 @@ impl View {
                     b.cover.clone(),
                 )
             })
-            .collect();
-        self.books.reset(rows, &state, animate);
+            .collect::<Vec<_>>();
+        let columns = state.get_book_columns().max(1) as usize;
+        let scroll_limit = (rows.len().div_ceil(columns) as f32 * state.get_book_row_height()
+            - state.get_books_viewport_height())
+        .max(0.);
+        let scroll_target = if current_changed {
+            0.
+        } else {
+            state.get_books_scroll_y().clamp(-scroll_limit, 0.)
+        };
+        self.books.reset(rows, &state, animate, scroll_target);
         state.set_selected_book_count(self.selected_books.len() as i32);
         state.set_all_books_selected(
             self.books.row_count() > 0 && self.books.iter().all(|b| b.selected),

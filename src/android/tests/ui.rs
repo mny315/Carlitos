@@ -61,6 +61,7 @@ fn request(request: Value) -> Result<Value> {
             }
             "action" => s.invoke_action(request["name"].as_str().unwrap_or("").into(), request["arg"].as_str().unwrap_or("").into()),
             "page" => s.invoke_navigate(request["value"].as_i64().unwrap_or(0) as i32),
+            "scroll-books" => s.set_books_scroll_y(request["y"].as_f64().context("Missing scroll offset")? as f32),
             "feedback" => {
                 use crate::app::Event;
                 super::ui::VIEW.with_borrow(|weak| -> Result<()> {
@@ -143,6 +144,9 @@ fn request(request: Value) -> Result<Value> {
         snapshot["sync_busy"] = json!(s.get_sync_busy());
         snapshot["sync_indexing"] = json!(s.get_sync_indexing());
         snapshot["book_selection"] = json!(s.get_book_selection());
+        snapshot["books_moving"] = json!(s.get_books_moving());
+        snapshot["book_row_height"] = json!(s.get_book_row_height());
+        snapshot["books_viewport_height"] = json!(s.get_books_viewport_height());
         snapshot["selected_book_count"] = json!(s.get_selected_book_count());
         snapshot["remove_book_count"] = json!(s.get_remove_book_count());
         snapshot["source_selection"] = json!(s.get_source_selection());
