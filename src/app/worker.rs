@@ -82,6 +82,7 @@ impl Handle {
                     maintenance_control: ScanControl::default(),
                     tag_control: ScanControl::default(),
                     sync: None,
+                    sync_request: None,
                     sync_hashing: false,
                     sync_hash_control: ScanControl::default(),
                     sync_hash_attempted: Default::default(),

@@ -165,6 +165,7 @@ impl Controller {
             "saved_progress": saved.progress, "settings": self.options.settings,
             "book_rates": rates,
             "sync": self.sync.as_ref().map(|s| s.test_status()),
+            "sync_hashing": self.sync_hashing,
             "playback": {"position": self.playback.position, "playing": self.playback.playing,
                 "phase": format!("{:?}", self.playback.phase), "token": self.token,
                 "rate": self.playback.rate, "silence": self.playback.skip_silence,

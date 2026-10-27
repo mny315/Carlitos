@@ -21,7 +21,7 @@ pub enum Command {
     SyncRefresh,
     SyncFinished(String),
     SyncFingerprints(Vec<crate::sync::Fingerprint>, bool),
-    SyncIncoming(Vec<crate::sync::Record>, Vec<crate::sync::RateRecord>),
+    SyncIncoming(Vec<crate::sync::Record>, Vec<crate::sync::RateRecord>, u64),
     SyncStatus(crate::sync::Status),
     #[cfg(all(target_os = "android", feature = "android-playback-tests"))]
     PlaybackTest(

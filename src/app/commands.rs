@@ -115,17 +115,27 @@ impl Controller {
         match command {
             Sync(request) => {
                 self.configure_sync()?;
-                if matches!(
+                let prepare = matches!(
                     request,
-                    crate::sync::Request::Now | crate::sync::Request::Running(true)
-                ) {
+                    crate::sync::Request::Now
+                        | crate::sync::Request::Running(true)
+                        | crate::sync::Request::Invite
+                        | crate::sync::Request::Pair(_)
+                );
+                if prepare {
                     self.save()?;
                     self.sync_hash_attempted.clear();
-                    self.refresh_sync()?;
+                    if let Some(sync) = &self.sync {
+                        sync.prepare(matches!(request, crate::sync::Request::Running(true)));
+                        self.sync_request = Some(request);
+                    }
+                } else {
+                    self.sync_request = None;
+                    if let Some(sync) = &self.sync {
+                        sync.request(request);
+                    }
                 }
-                if let Some(sync) = &self.sync {
-                    sync.request(request);
-                }
+                self.refresh_sync()?;
             }
             SyncRefresh => self.refresh_sync()?,
             SyncFinished(message) => self.notice(message),
@@ -141,9 +151,22 @@ impl Controller {
                     self.refresh_sync()?;
                 }
             }
-            SyncIncoming(records, rates) => self.receive_sync(records, rates)?,
+            SyncIncoming(records, rates, generation) => {
+                if self
+                    .sync
+                    .as_ref()
+                    .is_some_and(|sync| sync.accepts(generation))
+                {
+                    self.receive_sync(records, rates)?;
+                }
+            }
             SyncStatus(status) => {
-                if self.sync.is_some() {
+                if self
+                    .sync
+                    .as_ref()
+                    .is_some_and(|sync| sync.accepts(status.generation))
+                {
+                    self.refresh_sync()?;
                     let _ = self
                         .events
                         .try_send(Event::SyncReady(status.ready_books.clone()));

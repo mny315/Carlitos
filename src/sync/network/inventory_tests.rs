@@ -6,20 +6,11 @@ fn catalog(id: crate::library::Id, key: &str) -> BTreeMap<crate::library::Id, St
 }
 
 fn wait(rx: &mpsc::Receiver<Command>, predicate: impl Fn(&Command) -> bool) -> Command {
-    super::tests::wait(rx, |command| {
-        if let Command::SyncIncoming(records, rates) = command {
-            assert!(
-                records.is_empty() && rates.is_empty(),
-                "Paused inventory check applied progress"
-            );
-        }
-        predicate(command)
-    })
+    super::tests::wait(rx, predicate)
 }
 
 #[test]
-fn paused_devices_update_book_matches_after_deletion_on_either_side_without_applying_progress()
--> Result<()> {
+fn enabled_devices_update_book_matches_after_deletion_on_either_side() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (a_tx, a_rx) = mpsc::channel();
     let (b_tx, b_rx) = mpsc::channel();
@@ -41,6 +32,8 @@ fn paused_devices_update_book_matches_after_deletion_on_either_side_without_appl
     );
     assert!(!a.shared.lock().unwrap().running && !b.shared.lock().unwrap().running);
     for _ in a_rx.try_iter().chain(b_rx.try_iter()) {}
+    a.request(Request::Running(true));
+    b.request(Request::Running(true));
     let record = Record {
         book: key.clone(),
         part: "cd".repeat(32),
@@ -75,14 +68,6 @@ fn paused_devices_update_book_matches_after_deletion_on_either_side_without_appl
         &b_rx,
         |c| matches!(c, Command::SyncStatus(s) if s.ready_books.is_empty()),
     );
-    for command in a_rx.try_iter().chain(b_rx.try_iter()) {
-        if let Command::SyncIncoming(records, rates) = command {
-            assert!(
-                records.is_empty() && rates.is_empty(),
-                "Paused inventory check applied progress"
-            );
-        }
-    }
     Ok(())
 }
 
@@ -108,7 +93,10 @@ fn old_unknown_inventories_offline_devices_and_unpairing_do_not_leave_ready_mark
         assert!(state.status().ready_books.is_empty());
         state.receive_inventory(&peer_id, Some(vec![key.clone()]));
         state.inventories.get_mut(&peer_id).unwrap().1 = Instant::now() - Duration::from_secs(16);
+        assert_eq!(state.status().ready_books, [7]);
+        state.running = true;
         assert!(state.status().ready_books.is_empty());
+        state.running = false;
         state.receive_inventory(&peer_id, Some(vec![key]));
     }
     for _ in rx.try_iter() {}

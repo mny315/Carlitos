@@ -78,6 +78,7 @@ struct Controller {
     maintenance_control: ScanControl,
     tag_control: ScanControl,
     sync: Option<crate::sync::Network>,
+    sync_request: Option<crate::sync::Request>,
     sync_hashing: bool,
     sync_hash_control: ScanControl,
     sync_hash_attempted: std::collections::HashSet<(Id, String)>,

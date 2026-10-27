@@ -50,6 +50,24 @@ internal fun UiSuite.syncButtonChecks() {
     eventually("Synchronization resumed") { call().getBoolean("sync_running") }
     tap("Pause synchronization")
     eventually("Synchronization paused") { !call().getBoolean("sync_running") }
+    val playback = PlaybackSuite(instrumentation)
+    eventually("Paused sync releases discovery, preparation and connections") {
+        val state = playback.call("state")
+        val sync = state.getJSONObject("sync")
+        !sync.getBoolean("discovering") && !sync.getBoolean("preparing") &&
+            sync.getInt("active_connections") == 0 && !state.getBoolean("sync_hashing")
+    }
+    val connections = playback.call("state").getJSONObject("sync").getLong("connections_started")
+    Thread.sleep(3400)
+    check(playback.call("state").getJSONObject("sync").getLong("connections_started") == connections) {
+        "Paused device started a background exchange"
+    }
+    main {
+        val lock = Bridge::class.java.getDeclaredField("syncMulticast").apply { isAccessible = true }
+            .get(null) as android.net.wifi.WifiManager.MulticastLock?
+        check(lock?.isHeld != true) { "Paused sync retained the Wi-Fi multicast lock" }
+    }
+    note("Paused sync makes no background exchanges and releases its Wi-Fi multicast lock")
     for (page in listOf(3)) {
         call("page", "value" to page)
         Thread.sleep(350)

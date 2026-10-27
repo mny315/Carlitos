@@ -83,6 +83,10 @@ pub(super) fn pair(
                 continue;
             };
             let _guard = ConnectionGuard::track(shared, &stream)?;
+            ensure!(
+                shared.lock().unwrap().generation == generation,
+                "Sync cancelled"
+            );
             // PAKE prevents a recorded exchange from revealing a four-digit PIN.
             // Noise confirms its session key before the QR secret is released.
             let mut channel = match Channel::pin_client(stream, pin, &hello, &snapshot) {

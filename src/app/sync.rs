@@ -13,30 +13,14 @@ impl Controller {
             self.sync_hash_attempted.clear();
             let device = self.store()?.sync_device()?;
             let path = self.options.database.with_extension("sync.json");
-            #[cfg(target_os = "android")]
-            crate::android::bridge::dispatch(
-                serde_json::json!({"op":"sync-network", "enabled":true}),
-            )?;
-            match Network::start(path, device, self.tx.clone()) {
-                Ok(network) => self.sync = Some(network),
-                Err(error) => {
-                    #[cfg(target_os = "android")]
-                    let _ = crate::android::bridge::dispatch(
-                        serde_json::json!({"op":"sync-network", "enabled":false}),
-                    );
-                    return Err(error);
-                }
-            }
+            self.sync = Some(Network::start(path, device, self.tx.clone())?);
             self.refresh_sync()?;
         } else if !enabled {
+            self.sync_request = None;
             self.sync.take();
             self.sync_hash_control.cancel();
             let _ = self.events.try_send(Event::SyncIndexing(false));
             let _ = self.events.try_send(Event::SyncReady(vec![]));
-            #[cfg(target_os = "android")]
-            crate::android::bridge::dispatch(
-                serde_json::json!({"op":"sync-network", "enabled":false}),
-            )?;
             let _ = self.events.try_send(Event::SyncStatus(Status::default()));
         }
         Ok(())
@@ -74,6 +58,10 @@ impl Controller {
             return Ok(());
         }
         self.publish_sync();
+        if !self.sync.as_ref().is_some_and(Network::active) {
+            self.sync_hash_control.cancel();
+            return Ok(());
+        }
         if self.sync_hashing {
             return Ok(());
         }
@@ -99,6 +87,11 @@ impl Controller {
             .cloned()
             .collect();
         if files.is_empty() {
+            if let Some(request) = self.sync_request.take()
+                && let Some(sync) = &self.sync
+            {
+                sync.request(request);
+            }
             return Ok(());
         }
         let active = self.active_book();

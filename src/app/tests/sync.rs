@@ -2,6 +2,58 @@ use super::*;
 use anyhow::Context;
 
 #[test]
+fn paused_sync_does_not_read_files_and_rejects_data_queued_before_pause() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, commands) = controller(temp.path())?;
+    // A paused library with inaccessible audio must neither hash it nor emit
+    // a misleading read error before the user starts synchronization.
+    let file = &app.library.media[0];
+    std::fs::remove_file(crate::library::local_path(&file.uri).unwrap())?;
+    app.options.settings.local_sync = true;
+    app.configure_sync()?;
+    app.refresh_sync()?;
+    assert!(!app.sync_hashing);
+    assert!(
+        commands
+            .try_iter()
+            .all(|c| !matches!(c, Command::SyncFingerprints(..) | Command::Error(_)))
+    );
+
+    drop(app);
+    let other = tempfile::tempdir()?;
+    let (mut app, _, _, incoming) = remote_position(other.path())?;
+    app.handle(Command::Sync(crate::sync::Request::Running(false)))?;
+    app.handle(Command::SyncIncoming(incoming, vec![], 0))?;
+    assert_eq!(app.library.progress[0].position, 3_000);
+    Ok(())
+}
+
+#[test]
+fn first_pairing_prepares_the_catalog_before_opening_its_invitation() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, commands) = controller(temp.path())?;
+    app.options.settings.local_sync = true;
+    app.handle(Command::Sync(crate::sync::Request::Invite))?;
+    assert!(app.sync_hashing);
+    assert!(app.sync_request.is_some());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let command = commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?;
+        let invited = matches!(&command, Command::SyncStatus(s) if !s.invitation.is_empty());
+        app.handle(command)?;
+        if invited {
+            assert!(!app.sync_hashing);
+            assert!(app.sync_request.is_none());
+            assert_eq!(app.store()?.fingerprints()?.len(), app.library.media.len());
+            break;
+        }
+    }
+    app.handle(Command::Sync(crate::sync::Request::Running(false)))?;
+    assert!(!app.sync.as_ref().unwrap().active());
+    Ok(())
+}
+
+#[test]
 fn sync_ignores_missing_media_from_removed_books() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (mut app, commands) = controller(temp.path())?;
@@ -13,6 +65,7 @@ fn sync_ignores_missing_media_from_removed_books() -> Result<()> {
     app.library.media.push(orphan);
     app.options.settings.local_sync = true;
     app.configure_sync()?;
+    app.handle(Command::Sync(crate::sync::Request::Running(true)))?;
     let mut hashed = 0;
     loop {
         match commands.recv_timeout(Duration::from_secs(10))? {
@@ -40,6 +93,7 @@ fn sync_read_error_names_the_file_and_preserves_the_cause() -> Result<()> {
     std::fs::remove_file(crate::library::local_path(&file.uri).unwrap())?;
     app.options.settings.local_sync = true;
     app.configure_sync()?;
+    app.handle(Command::Sync(crate::sync::Request::Running(true)))?;
     let mut failure = None;
     loop {
         match commands.recv_timeout(Duration::from_secs(10))? {
@@ -132,6 +186,10 @@ fn fingerprinting_prioritizes_active_then_started_books_including_shared_recordi
             device,
             app.tx.clone(),
         )?);
+        app.sync
+            .as_ref()
+            .unwrap()
+            .request(crate::sync::Request::Running(true));
         app.refresh_sync()?;
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut files = Vec::new();

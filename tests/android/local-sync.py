@@ -11,6 +11,7 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("--adb", required=True)
 parser.add_argument("--app-apk", type=Path, help="Reuse a built isolated APK for camera/UI test changes")
+parser.add_argument("--keep-awake", action="store_true", help="Leave the phone unlocked after the test")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 output = root / "target/tests/android/local-sync"
@@ -53,4 +54,5 @@ with (output / "desktop.log").open("w") as log:
             os.killpg(host.pid, signal.SIGTERM)
             host.wait(timeout=20)
         subprocess.run([adb, "shell", "am", "force-stop", package], check=False)
-        subprocess.run([adb, "shell", "input", "keyevent", "KEYCODE_SLEEP"], check=False)
+        if not args.keep_awake:
+            subprocess.run([adb, "shell", "input", "keyevent", "KEYCODE_SLEEP"], check=False)

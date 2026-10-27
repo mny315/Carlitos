@@ -362,6 +362,7 @@ fn android_qr_and_progress_roundtrip() -> Result<()> {
     let (tx, rx) = mpsc::channel();
     let network = Network::start(temp.path().join("devices.json"), store.sync_device()?, tx)?;
     network.publish(records, store.sync_rates(&library)?);
+    network.request(Request::Running(true));
     network.request(Request::Invite);
     let until = Instant::now() + Duration::from_secs(180);
     let mut rewind = false;
@@ -382,7 +383,7 @@ fn android_qr_and_progress_roundtrip() -> Result<()> {
                 ready = true;
                 println!("Desktop sync peer ready; generated test audio and pairing QR");
             }
-            crate::app::Command::SyncIncoming(records, rates) => {
+            crate::app::Command::SyncIncoming(records, rates, _) => {
                 store.merge_sync_rates(&library, &rates)?;
                 let (received, _) = store.merge_sync(&library, &records)?;
                 library = received;

@@ -30,6 +30,7 @@ fn shutdown_interrupts_idle_incoming_and_outgoing_handshakes() -> Result<()> {
                 thread::sleep(Duration::from_millis(2));
             }
         } else {
+            network.request(Request::Running(true));
             let port = shared.lock().unwrap().config.port;
             TcpStream::connect((Ipv4Addr::LOCALHOST, port))?
         };
