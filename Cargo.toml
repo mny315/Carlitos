@@ -1,6 +1,6 @@
 [package]
 name = "carlitos"
-version = "1.0.7"
+version = "1.0.8"
 edition = "2024"
 autotests = false
 rust-version = "1.92"
