@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod pairing_tests;
 mod pin;
 #[cfg(test)]
 mod shutdown_tests;
@@ -21,6 +23,7 @@ use std::{
 
 const SERVICE: &str = "_carlitos._tcp.local.";
 const MAX_PEERS: usize = 16;
+const PAIRING_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub enum Request {
     Invite,
@@ -163,6 +166,7 @@ struct Shared {
     invitation: Option<(Invitation, Instant)>,
     pin_attempts: u8,
     pairing: Option<(Invitation, Instant)>,
+    pairing_failure: Option<String>,
     records: Vec<Record>,
     rates: Vec<RateRecord>,
     online: BTreeMap<String, Instant>,
@@ -193,7 +197,8 @@ impl Shared {
         Status {
             enabled: true,
             running: self.running,
-            busy: self.manual.is_some()
+            busy: self.pairing.is_some()
+                || self.manual.is_some()
                 || (self.running
                     && self
                         .activity
@@ -315,6 +320,7 @@ impl Network {
             invitation: None,
             pin_attempts: 0,
             pairing: None,
+            pairing_failure: None,
             records: vec![],
             rates: vec![],
             online: BTreeMap::new(),
@@ -389,7 +395,7 @@ impl Network {
                                 config.save(&state.path)?;
                                 state.config = config;
                                 state.online.remove(&id);
-                                if state.pairing.as_ref().is_some_and(|(i, _)| i.device == id) { state.pairing = None; }
+                                if state.pairing.as_ref().is_some_and(|(i, _)| i.device == id) { state.pairing = None; state.pairing_failure = None; }
                                 state.generation += 1;
                             }
                             Request::Now => {
@@ -445,7 +451,7 @@ impl Network {
                                 ensure!(invitation.device != state.config.id, "Cannot pair this device with itself");
                                 ensure!(state.config.peers.len() < MAX_PEERS, "Too many paired devices");
                                 let generation = state.generation;
-                                state.pairing = Some((invitation.clone(), Instant::now() + Duration::from_secs(300)));
+                                begin_pairing(&mut state, invitation.clone());
                                 drop(state);
                                 let addresses = merge_addresses(&invitation.addresses, discovered.get(&invitation.device).map_or(&[], |ad| ad.addresses.as_slice()));
                                 let peer = Peer { id: invitation.device.clone(), name: String::new(), key: invitation.key, addresses };
@@ -453,14 +459,7 @@ impl Network {
                                 let sender = tx.clone();
                                 let id = peer.id.clone();
                                 let job = thread::Builder::new().name("carlitos-pair".into()).spawn(move || {
-                                    let peer_id = peer.id.clone();
-                                    if let Err(error) = connect(&shared, &sender, peer, &invitation.ticket, generation) {
-                                        let mut state = shared.lock().unwrap();
-                                        if !state.config.peers.iter().any(|p| p.id == peer_id) {
-                                            state.message = format!("{}: {error:#}", crate::app::text("Не удалось связать устройства. Проверьте сеть и обновите QR", "Could not pair devices. Check the network and renew the QR code"));
-                                            state.error = true;
-                                        }
-                                    }
+                                    connect_pairing(&shared, &sender, peer, &invitation.ticket, generation);
                                 })?;
                                 jobs.push((id, job));
                             }
@@ -477,7 +476,13 @@ impl Network {
                 let (peers, reverse, dirty, generation, automatic) = {
                     let mut state = worker.lock().unwrap();
                     if state.invitation.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.invitation = None; }
-                    if state.pairing.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.pairing = None; }
+                    if state.pairing.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) {
+                        state.pairing = None;
+                        state.message = state.pairing_failure.take().unwrap_or_else(|| crate::app::text(
+                            "Не удалось связать устройства. Проверьте общую сеть и обновите QR-код",
+                            "Could not pair devices. Check the shared network and renew the QR code").into());
+                        state.error = true;
+                    }
                     let request = state.pairing.as_ref().map(|(i, _)| (i.device.clone(), i.ticket.clone()));
                     let offer = state.invitation.as_ref().filter(|(i, _)| !i.pin.is_empty()).map(|(i, _)| i.ticket.clone());
                     // A completed request must not trigger an unsolicited exchange
@@ -612,7 +617,11 @@ fn reverse_peer(state: &Shared, id: &str, ad: &Advertisement) -> Option<(Peer, S
         || ticket != &invitation.ticket
         || Instant::now() >= *until
         || id == state.config.id
-        || state.config.peers.iter().any(|p| p.id == id)
+        || state
+            .config
+            .peers
+            .iter()
+            .any(|p| p.id == id && p.key == invitation.key)
     {
         return None;
     }
@@ -625,6 +634,43 @@ fn reverse_peer(state: &Shared, id: &str, ad: &Advertisement) -> Option<(Peer, S
         },
         ticket.clone(),
     ))
+}
+
+fn begin_pairing(state: &mut Shared, invitation: Invitation) {
+    state.pairing = Some((invitation, Instant::now() + PAIRING_TIMEOUT));
+    state.pairing_failure = None;
+    state.message = crate::app::text("Связываем устройства…", "Pairing devices…").into();
+    state.error = false;
+}
+
+fn connect_pairing(
+    shared: &Arc<Mutex<Shared>>,
+    tx: &mpsc::Sender<Command>,
+    peer: Peer,
+    ticket: &str,
+    generation: u64,
+) {
+    let (id, secret) = (peer.id.clone(), peer.key.clone());
+    if let Err(error) = connect(shared, tx, peer, ticket, generation) {
+        let mut state = shared.lock().unwrap();
+        // The QR owner can still connect back through discovery when our
+        // outgoing connection is blocked. Only expiry ends the whole attempt.
+        // An older worker must not overwrite a completed or replaced request.
+        if !state.stopped
+            && state.generation == generation
+            && state.pairing.as_ref().is_some_and(|(i, until)| {
+                i.device == id && i.ticket == ticket && i.key == secret && Instant::now() < *until
+            })
+        {
+            state.pairing_failure = Some(format!(
+                "{}: {error:#}",
+                crate::app::text(
+                    "Не удалось связать устройства. Проверьте сеть и обновите QR",
+                    "Could not pair devices. Check the network and renew the QR code"
+                )
+            ));
+        }
+    }
 }
 
 fn finish_pairing(state: &mut Shared, id: &str, ticket: &str, secret: &str) {
@@ -641,6 +687,7 @@ fn finish_pairing(state: &mut Shared, id: &str, ticket: &str, secret: &str) {
         .is_some_and(|(i, _)| i.device == id && i.key == secret)
     {
         state.pairing = None;
+        state.pairing_failure = None;
     }
     if !ticket.is_empty() {
         state.message.clear();
@@ -985,7 +1032,10 @@ mod tests {
         Ok(())
     }
     #[track_caller]
-    fn wait(rx: &mpsc::Receiver<Command>, predicate: impl Fn(&Command) -> bool) -> Command {
+    pub(super) fn wait(
+        rx: &mpsc::Receiver<Command>,
+        predicate: impl Fn(&Command) -> bool,
+    ) -> Command {
         let until = Instant::now() + Duration::from_secs(12);
         loop {
             let command = rx
@@ -999,7 +1049,7 @@ mod tests {
             }
         }
     }
-    fn invitation(network: &Network, rx: &mpsc::Receiver<Command>) -> String {
+    pub(super) fn invitation(network: &Network, rx: &mpsc::Receiver<Command>) -> String {
         network.request(Request::Invite);
         let Command::SyncStatus(status) = wait(
             rx,

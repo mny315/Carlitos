@@ -113,12 +113,7 @@ pub(super) fn pair(
                 state.config.peers.len() < MAX_PEERS,
                 "Too many paired devices"
             );
-            state.pairing = Some((
-                invitation.clone(),
-                Instant::now() + Duration::from_secs(300),
-            ));
-            state.message.clear();
-            state.error = false;
+            begin_pairing(&mut state, invitation.clone());
             drop(state);
             let peer = Peer {
                 id: device,
@@ -126,7 +121,8 @@ pub(super) fn pair(
                 key: invitation.key,
                 addresses: invitation.addresses,
             };
-            return connect(shared, tx, peer, &invitation.ticket, generation);
+            connect_pairing(shared, tx, peer, &invitation.ticket, generation);
+            return Ok(());
         }
     }
     anyhow::bail!(
