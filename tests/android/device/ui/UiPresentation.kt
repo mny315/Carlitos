@@ -1,12 +1,16 @@
 package io.github.mny315.carlitos
 
 import android.content.Intent
+import android.content.ComponentName
 import android.content.pm.ActivityInfo
 import androidx.media3.common.util.UnstableApi
 import java.io.File
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import java.util.concurrent.TimeUnit
 
 @UnstableApi
-internal fun UiSuite.presentationChecks(title: String, packageName: String) {
+internal fun UiSuite.presentationChecks(title: String, packageName: String, controlsOnly: Boolean = false) {
     if (call().getBoolean("keyboard")) { back(); eventually("Initial keyboard hidden") { !call().getBoolean("keyboard") } }
     eventually("Library fixture") { call().getJSONArray("books").length() > 0 }
     val books = call().getJSONArray("books")
@@ -36,8 +40,10 @@ internal fun UiSuite.presentationChecks(title: String, packageName: String) {
     tap("Unmute")
     eventually("Unmute updates UI") { !call().getBoolean("muted") }
     capture("volume")
+    val volumeHaptics = call().getInt("haptic_buttons")
     tap("Navigation menu")
     check(call().getInt("overlay") == 0 && call().getInt("page") == 1) { "Outside tap must close without opening navigation: ${call()}" }
+    check(call().getInt("haptic_buttons") == volumeHaptics + 1) { "Outside dismissal must vibrate once" }
     tap("Volume")
     check(kotlin.math.abs(call().getDouble("volume") - .65) < .04) { "Outside dismissal must keep volume" }
     back(); check(call().getInt("page") == 1 && call().getInt("overlay") == 0) { "Back after volume: ${call()}" }
@@ -59,8 +65,10 @@ internal fun UiSuite.presentationChecks(title: String, packageName: String) {
     check(call().getInt("overlay") == 0)
     tap("Playback speed")
     check(kotlin.math.abs(call().getDouble("rate") - 1.75) < .001) { "Done must keep speed" }
+    val speedHaptics = call().getInt("haptic_buttons")
     tap("Navigation menu")
     check(call().getInt("overlay") == 0 && call().getInt("page") == 1)
+    check(call().getInt("haptic_buttons") == speedHaptics + 1)
     tap("Playback speed")
     check(kotlin.math.abs(call().getDouble("rate") - 1.75) < .001) { "Outside dismissal must keep speed" }
     back(); check(call().getInt("page") == 1)
@@ -71,6 +79,32 @@ internal fun UiSuite.presentationChecks(title: String, packageName: String) {
     eventually("Seek drag") { call().getDouble("position") in .50.. .65 }
     tap("Pause")
     note("chapter playback and touch seeking")
+    val resumePlayback = PlaybackSuite(instrumentation)
+    lateinit var controllerFuture: com.google.common.util.concurrent.ListenableFuture<MediaController>
+    main { controllerFuture = MediaController.Builder(instrumentation.targetContext,
+        SessionToken(instrumentation.targetContext, ComponentName(instrumentation.targetContext, PlaybackService::class.java))).buildAsync() }
+    resumePlayback.controller = controllerFuture.get(10, TimeUnit.SECONDS)
+    try {
+        val first = call().getJSONArray("part_rows").getJSONObject(0).getString("key").substringBefore(':').toLong()
+        resumePlayback.resumeVolume(first)
+    } finally { main { resumePlayback.controller.pause(); resumePlayback.controller.release() } }
+    tap("Exact time")
+    check(call().getInt("overlay") == 3)
+    check(element("Go").getDouble("y") > call().getDouble("height") / 2) { "Time must use a bottom sheet" }
+    capture("go-to-time")
+    tap("Beginning")
+    tap("Go")
+    eventually("Exact time seeks to beginning") { call().getInt("overlay") == 0 && call().getDouble("position") < .01 }
+    tap("Exact time")
+    val timeHaptics = call().getInt("haptic_buttons")
+    tap("Navigation menu")
+    check(call().getInt("overlay") == 0 && call().getInt("haptic_buttons") == timeHaptics + 1)
+    call("action", "name" to "begin-edit", "arg" to book)
+    tap("Part order")
+    check(element("Done").getDouble("y") < call().getDouble("height") / 3) { "Part order Done belongs in the header" }
+    capture("part-order")
+    tap("Done")
+    if (controlsOnly) return
     back(); check(call().getInt("page") == 0)
     tap("Book actions: $title")
     check(call().getBoolean("menu"))

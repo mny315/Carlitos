@@ -4,6 +4,7 @@ import { Theme } from "theme.slint";
 import { Action, Label, Field, Cover, SeekBar } from "controls.slint";
 import { Transport, MobileTimeline, MobileVolumeAction, MobileRateAction } from "player.slint";
 import { PlaybackSheet } from "playback-sheet.slint";
+import { TimeSheet } from "time-sheet.slint";
 export component AppDialog inherits Rectangle {
     in property <length> top-inset;
     in property <length> bottom-inset;
@@ -14,10 +15,10 @@ export component AppDialog inherits Rectangle {
     private property <bool> sort-menu: dialog-kind == 9;
     private property <bool> navigation-menu: dialog-kind == 12;
     private property <bool> popup-menu: sort-menu || navigation-menu;
-    private property <bool> playback-sheet: State.android && (dialog-kind == 6 || dialog-kind == 7);
+    private property <bool> playback-sheet: State.android && (dialog-kind == 3 || dialog-kind == 6 || dialog-kind == 7);
     function dismiss() { State.overlay = 0; }
     function dismiss-outside() {
-        if (root.requested-kind != 0 && (root.popup-menu || root.playback-sheet)) { root.dismiss(); }
+        if (root.requested-kind != 0 && (root.popup-menu || root.playback-sheet || root.dialog-kind == 3)) { Theme.haptic("button"); root.dismiss(); }
     }
     // Keep the closing dialog's content until its fade has finished.
     changed requested-kind => {
@@ -51,7 +52,7 @@ export component AppDialog inherits Rectangle {
             return reject;
         }
     TouchArea { clicked => { root.dismiss-outside(); } }
-    if root.playback-sheet: PlaybackSheet {
+    if root.playback-sheet && root.dialog-kind != 3: PlaybackSheet {
         speed: root.dialog-kind == 6;
         x: (parent.width - self.width) / 2;
         // Travel from below the screen, including the bottom safe area.
@@ -59,6 +60,13 @@ export component AppDialog inherits Rectangle {
         width: min(parent.width - 24px, 480px);
         height: min(parent.height - 12px, self.preferred-height);
         done => { root.dismiss(); }
+    }
+    if root.playback-sheet && root.dialog-kind == 3: TimeSheet {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height + (1 - root.opacity) * (self.height + root.bottom-inset);
+        width: min(parent.width - 24px, 480px);
+        height: min(parent.height - 12px, self.preferred-height);
+        done => { State.action("exact-time", State.exact-time); }
     }
     if !root.playback-sheet: Rectangle {
         x: root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-x - self.width : State.sort-menu-x) - root.left-inset, 8px, parent.width - self.width - 8px) : (parent.width - self.width) / 2;

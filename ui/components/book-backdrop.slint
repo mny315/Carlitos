@@ -41,8 +41,10 @@ export component BookBackdrop inherits Rectangle {
             y: parent.height * root.centers[index] - self.height / 2;
             source: State.backdrop-glow;
             image-fit: fill;
-            colorize: Theme.accent.mix(root.colors[index], 0.55);
-            opacity: root.reveal * (Theme.dark ? 0.56 : 0.28) * (0.15 + level * 0.85);
+            // Light surfaces need deeper pigment as well as stronger opacity
+            // for the soft frequency bands to remain visible behind the text.
+            colorize: Theme.dark ? Theme.accent.mix(root.colors[index], 0.55) : Theme.accent.mix(root.colors[index], 0.55).darker(12%);
+            opacity: root.reveal * (Theme.dark ? 0.56 : 0.64) * (0.15 + level * 0.85);
         }
         Rectangle {
             opacity: root.reveal;

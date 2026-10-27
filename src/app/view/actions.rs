@@ -158,6 +158,7 @@ impl View {
             "sync-invite" => Some(Command::Sync(crate::sync::Request::Invite)),
             "sync-cancel" => Some(Command::Sync(crate::sync::Request::CancelInvite)),
             "sync-now" => Some(Command::Sync(crate::sync::Request::Now)),
+            "sync-toggle" => Some(Command::Sync(crate::sync::Request::Running(!state.get_sync_running()))),
             "sync-forget" => Some(Command::Sync(crate::sync::Request::Forget(arg.into()))),
             "sync-pair" => {
                 let value = state.get_sync_input().to_string();

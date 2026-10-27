@@ -7,6 +7,12 @@ import android.os.Bundle
 import java.io.File
 
 @UnstableApi
+private fun UiSuite.openSourceSettings() {
+    val label = elements().last { it.getString("label").startsWith("Folder settings: ") }.getString("label")
+    tap(label)
+}
+
+@UnstableApi
 internal fun UiSuite.stalePickerResults(title: String) {
     val books = call().getJSONArray("books")
     val book = (0 until books.length()).map { books.getJSONObject(it) }
@@ -42,14 +48,14 @@ internal fun UiSuite.stalePickerResults(title: String) {
     tap("Cancel")
     call("page", "value" to 4)
     Thread.sleep(350)
-    tap("Update…")
+    openSourceSettings()
     val source = call().getString("source_path")
     Bridge.emit("picked", "kind" to "source", "uri" to "content://stale/tree/other", "name" to "Old folder", "owner" to "-1")
     delivered("stale source result delivered")
     check(call().getString("source_path") == source) { "A late source result changed a different source editor" }
     val oldSourceOwner = call().getString("picker_owner")
     tap("Cancel")
-    tap("Update…")
+    openSourceSettings()
     Bridge.emit("picked", "kind" to "source", "uri" to "content://stale/tree/other", "name" to "Old folder", "owner" to oldSourceOwner)
     delivered("reopened source result delivered")
     check(call().getString("source_path") == source) { "A cancelled picker changed the reopened editor for the same source" }
@@ -117,7 +123,7 @@ internal fun UiSuite.detachedNativeCallbacks() {
 internal fun UiSuite.recreatedSources() {
     call("page", "value" to 4)
     Thread.sleep(350)
-    tap("Update…")
+    openSourceSettings()
     check(call().getInt("overlay") == 5)
     val source = call().getString("source_key")
     val owner = call().getString("picker_owner")
@@ -224,6 +230,7 @@ internal fun UiSuite.recreatedEdits(title: String) {
     check(call().getBoolean("scanning")) { "Recreation lost the running scan: ${call()}" }
     element("Cancel")
     eventually("Scan completed in recreated Activity") { call().getInt("drafts") == 1 && !call().getBoolean("scanning") }
+    if (elements().none { it.getString("label") == "Review parts" }) tap("Show discovered books")
     tap("Review parts")
     val draftTitle = call().getString("draft_title")
     recreate()
@@ -234,12 +241,13 @@ internal fun UiSuite.recreatedEdits(title: String) {
     check(call().getInt("selected_draft") == -1) { "Recreation reopened a draft that no longer exists: ${call()}" }
     call("action", "name" to "scan", "arg" to folder.toString())
     eventually("Rescan completed") { call().getInt("drafts") == 1 && !call().getBoolean("scanning") }
+    if (elements().none { it.getString("label") == "Review parts" }) tap("Show discovered books")
     tap("Review parts")
     whileDetached { PlaybackSuite(instrumentation).call("import") }
     eventually("Background import returned to library") { call().getInt("page") == 0 && call().getInt("selected_draft") == -1 }
     call("page", "value" to 4)
     Thread.sleep(350)
-    tap("Update…")
+    openSourceSettings()
     val source = call().getString("source_key")
     check(call().getString("source_path").contains("/slow"))
     tap("Update")

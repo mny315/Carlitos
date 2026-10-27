@@ -7,7 +7,8 @@ import androidx.media3.common.util.UnstableApi
 @UnstableApi
 internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = false, inputOnly: Boolean = false,
     pauseOnly: Boolean = false, requireBluetooth: Boolean = false, sourceSelectionOnly: Boolean = false,
-    feedbackOnly: Boolean = false, settingsOnly: Boolean = false, backgroundOnly: Boolean = false) {
+    feedbackOnly: Boolean = false, settingsOnly: Boolean = false, backgroundOnly: Boolean = false,
+    presentationOnly: Boolean = false) {
     check(instrumentation.targetContext.packageName.endsWith(".playbacktest"))
     val originalFont = shell("settings get system font_scale")
     val originalSize = shell("wm size").lineSequence().firstOrNull { it.startsWith("Override size:") }?.substringAfter(":")?.trim()
@@ -25,6 +26,13 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         if (feedbackOnly) {
             call("setup")
             feedbackChecks()
+            return
+        }
+        if (presentationOnly) {
+            grantFixtures(instrumentation, ui = true)
+            PlaybackSuite(instrumentation).fixture(title, listOf("tone", "part2"))
+            call("setup")
+            presentationChecks(title, packageName, controlsOnly = true)
             return
         }
         if (settingsOnly) {

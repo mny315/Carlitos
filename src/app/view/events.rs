@@ -15,6 +15,7 @@ impl View {
         match event {
             Event::SyncIndexing(active) => state.set_sync_indexing(active),
             Event::SyncStatus(status) => {
+                state.set_sync_running(status.running);
                 state.set_sync_busy(status.busy);
                 state.set_sync_error(status.error);
                 state.set_sync_code(status.code.into());

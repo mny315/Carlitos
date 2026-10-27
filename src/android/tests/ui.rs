@@ -123,6 +123,7 @@ fn request(request: Value) -> Result<Value> {
             "scale":w.window().scale_factor(),"width":size.width,"height":size.height});
         snapshot["notice_timed"] = json!(s.get_notice_timed());
         snapshot["haptic_buttons"] = json!(HAPTIC_BUTTONS.get());
+        snapshot["sync_running"] = json!(s.get_sync_running());
         snapshot["notice_remaining"] = json!(s.get_notice_remaining());
         snapshot["picker_owner"] = json!(s.get_picker_owner().as_str());
         snapshot["loading"] = json!(s.get_loading());

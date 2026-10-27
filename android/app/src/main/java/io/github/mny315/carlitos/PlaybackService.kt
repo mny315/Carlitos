@@ -37,6 +37,18 @@ class PlaybackService : MediaSessionService() {
     private var applying = false
     private var loaded = false
     private var released = false
+    private var targetVolume = 1f
+    private var resumeFadePending = false
+    private var resumeFadeStarted = 0L
+    private val resumeFade = object : Runnable {
+        override fun run() {
+            if (released || !player.isPlaying || !resumeFadePending) return
+            val fraction = ((SystemClock.uptimeMillis() - resumeFadeStarted) / 120f).coerceIn(0f, 1f)
+            player.volume = targetVolume * fraction
+            if (fraction < 1f) handler.postDelayed(this, 16)
+            else resumeFadePending = false
+        }
+    }
     @Volatile private var diagnostics = "{}"
     private val tick = object : Runnable {
         override fun run() {
@@ -128,6 +140,13 @@ class PlaybackService : MediaSessionService() {
         listener = object : Player.Listener {
             override fun onEvents(source: Player, events: Player.Events) {
                 if (currentGeneration == generation && !applying) {
+                    if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                        if (source.isPlaying && resumeFadePending) {
+                            resumeFadeStarted = SystemClock.uptimeMillis()
+                            handler.removeCallbacks(resumeFade)
+                            handler.post(resumeFade)
+                        } else if (!source.isPlaying) handler.removeCallbacks(resumeFade)
+                    }
                     snapshot()
                     if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !source.isPlaying &&
                         source.playbackState == Player.STATE_READY) confirmPause()
@@ -143,9 +162,11 @@ class PlaybackService : MediaSessionService() {
             if (command.has("token")) token = command.getLong("token")
             when (op) {
                 "load" -> {
+                    cancelResumeFade()
                     generation++
                     listener?.let { player.removeListener(it) }
                     player.stop()
+                    player.playWhenReady = false
                     player.clearMediaItems()
                     error = null
                     seekDone = false
@@ -157,18 +178,23 @@ class PlaybackService : MediaSessionService() {
                         .setMediaMetadata(MediaMetadata.Builder().setTitle(command.getString("title"))
                             .setIsPlayable(true).build()).build(), command.getLong("position"))
                     installListener()
+                    setPlaying(command.getBoolean("playing"))
                     player.prepare()
-                    player.playWhenReady = command.getBoolean("playing")
                 }
-                "playing" -> player.playWhenReady = command.getBoolean("playing")
+                "playing" -> setPlaying(command.getBoolean("playing"))
                 "seek" -> { player.seekTo(command.getLong("position")); seekDone = true }
                 "rate" -> player.setPlaybackSpeed(command.getDouble("rate").toFloat())
                 "rate_step" -> player.setPlaybackSpeed((kotlin.math.round(player.playbackParameters.speed * 100 +
                     if (command.getBoolean("forward")) 5 else -5) / 100).coerceIn(0.5f, 3f))
                 "silence" -> player.skipSilenceEnabled = command.getBoolean("enabled")
-                "volume" -> player.volume = if (command.getBoolean("muted")) 0f else command.getDouble("volume").toFloat()
+                "volume" -> {
+                    targetVolume = if (command.getBoolean("muted")) 0f else command.getDouble("volume").toFloat().coerceIn(0f, 1f)
+                    if (!resumeFadePending) player.volume = targetVolume
+                    else player.volume = minOf(player.volume, targetVolume)
+                }
                 "snapshot" -> if (barrierSince == null) barrierSince = SystemClock.elapsedRealtime()
                 "stop" -> {
+                    cancelResumeFade()
                     generation++
                     listener?.let { player.removeListener(it) }
                     listener = null
@@ -189,6 +215,27 @@ class PlaybackService : MediaSessionService() {
             // pause acknowledgement is in transit. Confirm the latest paused
             // command too, after its audio-thread work has completed.
             if (!player.isPlaying && player.playbackState == Player.STATE_READY) confirmPause()
+        }
+    }
+    private fun cancelResumeFade() {
+        handler.removeCallbacks(resumeFade)
+        resumeFadePending = false
+        player.volume = targetVolume
+    }
+    private fun setPlaying(playing: Boolean) {
+        if (playing && !player.playWhenReady) {
+            // AudioTrack/focus restoration may expose queued PCM immediately.
+            // Attenuate before resuming, then ease up to the user's volume only
+            // once output starts; buffering time must not consume the fade.
+            handler.removeCallbacks(resumeFade)
+            resumeFadePending = true
+            player.volume = 0f
+        }
+        player.playWhenReady = playing
+        if (!playing) cancelResumeFade()
+        else if (player.isPlaying && resumeFadePending) {
+            resumeFadeStarted = SystemClock.uptimeMillis()
+            handler.post(resumeFade)
         }
     }
     private fun confirmPause() {
@@ -228,7 +275,7 @@ class PlaybackService : MediaSessionService() {
         val report = JSONObject().put("token", token).put("generation", generation)
             .put("position", player.currentPosition).put("playing", player.isPlaying)
             .put("rate", player.playbackParameters.speed).put("silence", player.skipSilenceEnabled)
-            .put("volume", player.volume).put("duration", player.duration)
+            .put("volume", targetVolume).put("output_volume", player.volume).put("duration", player.duration)
             .put("uri", player.currentMediaItem?.localConfiguration?.uri)
             .put("phase", phase).put("player", System.identityHashCode(player))
             .put("error", error ?: JSONObject.NULL)

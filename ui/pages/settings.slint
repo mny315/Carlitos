@@ -1,6 +1,6 @@
 import { ScrollView, ComboBox, SpinBox } from "std-widgets.slint";
 import { State } from "../state.slint";
-import { SyncAction } from "../components/sync-action.slint";
+import { SyncAction, SyncToggle } from "../components/sync-action.slint";
 import { Theme } from "../components/theme.slint";
 import { Action, Label, Toggle, BusyStatus, PercentSlider, Field } from "../components/controls.slint";
 
@@ -123,6 +123,7 @@ component SettingsContent inherits VerticalLayout {
         if State.local-sync: VerticalLayout {
             spacing: 10px;
             Label { text: State.sync-name; color: Theme.muted; wrap: word-wrap; }
+            SyncToggle { fill: State.android; }
             if State.sync-indexing: BusyStatus { text: Theme.t("Подготавливаем книги для синхронизации…", "Preparing books for synchronization…"); }
             Label { text: Theme.t("Подключите устройства к одному роутеру и откройте Carlitos на обоих. На них должны быть одинаковые аудиофайлы книг.", "Connect both devices to the same router and open Carlitos on both. They must have the same audiobook files."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
             if root.grouped: HorizontalLayout {
@@ -182,7 +183,7 @@ component SettingsContent inherits VerticalLayout {
                 Action { destructive: true; text: Theme.t("Отвязать", "Unpair"); accessible-label: Theme.t("Отвязать устройство ", "Unpair device ") + peer.name; clicked => { State.action("sync-forget", peer.key); } }
             }
             if State.sync-peers.length > 0 && !root.grouped: SyncAction { fill: State.android; }
-            Label { text: Theme.t("Прогресс обновляется автоматически. Для ручного обмена достаточно нажать кнопку на одном устройстве.", "Progress updates automatically. To sync manually, press the button on either device."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
+            Label { text: Theme.t("При запуске обмен на паузе. Включите его кнопкой над обновлением или нажмите обновление для разового обмена. Ручной запрос с другого устройства принимается и на паузе.", "Sync starts paused. Use the button above refresh to start it, or refresh for a single exchange. Manual requests from another device are also accepted while paused."); color: Theme.muted; wrap: word-wrap; font-size: 12px * Theme.font-scale; }
         }
         Rectangle { min-height: 16px; vertical-stretch: 1; }
 }

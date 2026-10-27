@@ -2,12 +2,22 @@ import { State } from "../state.slint";
 import { Theme } from "theme.slint";
 import { Action } from "controls.slint";
 
+export component SyncToggle inherits Action {
+    in property <bool> icon-only: false;
+    // This icon reports the mode, matching the refresh control below it.
+    icon: State.sync-running ? @image-url("../icons/play.svg") : @image-url("../icons/pause.svg");
+    selected: State.sync-running;
+    text: icon-only ? "" : State.sync-running ? Theme.t("Обмен включён", "Sync running") : Theme.t("Обмен на паузе", "Sync paused");
+    accessible-label: State.sync-running ? Theme.t("Приостановить синхронизацию", "Pause synchronization") : Theme.t("Включить синхронизацию", "Start synchronization");
+    clicked => { State.action("sync-toggle", ""); }
+}
+
 export component SyncAction inherits Action {
     in property <bool> icon-only: false;
     private property <bool> working: State.local-sync && (State.sync-busy || State.sync-indexing);
     icon: @image-url("../icons/refresh.svg");
-    spinning: working;
-    selected: working;
+    spinning: State.sync-running || working;
+    selected: State.sync-running || working;
     enabled: !State.sync-busy;
     visual-enabled: true;
     text: icon-only ? "" : working ? Theme.t("Синхронизация…", "Syncing…") : Theme.t("Синхронизировать", "Sync");

@@ -36,6 +36,7 @@ internal fun PlaybackSuite.run(formatsOnly: Boolean = false, formatPlayMs: Long 
         checkpointWhileLoading(fault)
         silencePauseClock(silent)
         pauseSettingsBursts(parts[0])
+        resumeVolume(parts[0])
         load(parts[0]); pause(); silence(false)
         main { controller.volume = 0f }
         for (speed in listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)) {

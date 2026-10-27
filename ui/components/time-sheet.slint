@@ -1,0 +1,41 @@
+import { ScrollView } from "std-widgets.slint";
+import { State } from "../state.slint";
+import { Theme } from "theme.slint";
+import { Action, Label, Field } from "controls.slint";
+
+export component TimeSheet inherits Rectangle {
+    callback done;
+    preferred-height: content.preferred-height;
+    background: Theme.surface;
+    border-radius: 16px;
+    border-width: 1px; border-color: Theme.line;
+    TouchArea { }
+    ScrollView {
+        content-width: self.width;
+        content := VerticalLayout {
+            padding: 16px; spacing: 12px;
+            HorizontalLayout { spacing: 10px;
+                Image { source: @image-url("../icons/clock.svg"); colorize: Theme.accent; width: 24px; height: 24px; }
+                Label { text: Theme.t("Перейти ко времени", "Go to time"); font-size: 18px * Theme.font-scale; font-weight: 600; wrap: word-wrap; }
+            }
+            Label { text: State.part-title; color: Theme.muted; wrap: word-wrap; }
+            Field {
+                text <=> State.exact-time;
+                text-size: 26px * Theme.font-scale;
+                height: max(60px, 38px * Theme.font-scale);
+                label: Theme.t("Время в текущей части", "Time in this part");
+                placeholder: "00:00";
+                accepted(_) => { root.done(); }
+            }
+            HorizontalLayout { spacing: 8px;
+                Label { text: Theme.t("мм:сс или чч:мм:сс", "mm:ss or hh:mm:ss"); color: Theme.muted; font-size: 12px * Theme.font-scale; wrap: word-wrap; }
+                Label { text: "0:00 — " + State.duration-text; horizontal-alignment: right; color: Theme.muted; font-size: 12px * Theme.font-scale; wrap: word-wrap; }
+            }
+            HorizontalLayout { spacing: 8px;
+                Action { fill: true; centered: true; text: Theme.t("В начало", "Beginning"); clicked => { State.exact-time = "0:00"; } }
+                Action { fill: true; centered: true; text: Theme.t("Сейчас", "Current"); clicked => { State.exact-time = State.position-text; } }
+            }
+            Action { fill: true; centered: true; primary: true; icon: @image-url("../icons/forward.svg"); text: Theme.t("Перейти", "Go"); clicked => { root.done(); } }
+        }
+    }
+}

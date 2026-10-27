@@ -86,6 +86,7 @@ impl Record {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Status {
     pub enabled: bool,
+    pub running: bool,
     pub busy: bool,
     pub error: bool,
     pub name: String,

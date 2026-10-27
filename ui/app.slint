@@ -2,7 +2,6 @@ import { Palette } from "std-widgets.slint";
 import { State, BookItem, PartItem, ImportItem, SourceItem, SyncPeer, VoiceBands } from "state.slint";
 import { Theme } from "components/theme.slint";
 import { Action, Label, PageFrame } from "components/controls.slint";
-import { SyncAction } from "components/sync-action.slint";
 import { PlayerPanel, MobilePlayer } from "components/player.slint";
 import { AppDialog } from "components/dialog.slint";
 import { BookMenu } from "components/book-menu.slint";
@@ -109,7 +108,6 @@ export component AppWindow inherits Window {
                     Label { text: "Carlitos"; font-size: 20px * Theme.font-scale; font-weight: 650; }
                     if State.page != 0: Action { icon: @image-url("icons/book.svg"); accessible-label: Theme.t("Библиотека", "Library"); quiet: true; clicked => { State.navigate(0); } }
                     if State.page == 0: Action { icon: @image-url("icons/search.svg"); accessible-label: Theme.t("Поиск книг", "Search books"); quiet: true; clicked => { library.focus-search(); } }
-                    if State.page == 0 && State.local-sync: SyncAction { icon-only: true; quiet: true; }
                     if State.page == 0: Action { icon: @image-url("icons/plus.svg"); accessible-label: Theme.t("Добавить книги", "Add books"); quiet: true; clicked => { State.navigate(2); } }
                     Action {
                         icon: @image-url("icons/more.svg"); accessible-label: Theme.t("Меню", "Navigation menu");

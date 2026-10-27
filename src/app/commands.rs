@@ -108,7 +108,10 @@ impl Controller {
         match command {
             Sync(request) => {
                 self.configure_sync()?;
-                if matches!(request, crate::sync::Request::Now) {
+                if matches!(
+                    request,
+                    crate::sync::Request::Now | crate::sync::Request::Running(true)
+                ) {
                     self.save()?;
                     self.sync_hash_attempted.clear();
                     self.refresh_sync()?;

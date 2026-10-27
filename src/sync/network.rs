@@ -26,6 +26,7 @@ pub enum Request {
     Pair(String),
     Forget(String),
     Now,
+    Running(bool),
     Refresh,
 }
 
@@ -165,6 +166,7 @@ struct Shared {
     online: BTreeMap<String, Instant>,
     message: String,
     error: bool,
+    running: bool,
     manual: Option<Instant>,
     activity: Option<Instant>,
     sync_request: u64,
@@ -186,10 +188,12 @@ impl Shared {
     fn status(&self) -> Status {
         Status {
             enabled: true,
+            running: self.running,
             busy: self.manual.is_some()
-                || self
-                    .activity
-                    .is_some_and(|t| t.elapsed() < Duration::from_millis(600)),
+                || (self.running
+                    && self
+                        .activity
+                        .is_some_and(|t| t.elapsed() < Duration::from_millis(600))),
             error: self.error,
             name: self.config.name.clone(),
             invitation: self
@@ -279,6 +283,7 @@ impl Network {
             online: BTreeMap::new(),
             message: String::new(),
             error: false,
+            running: false,
             manual: None,
             activity: None,
             sync_request: 0,
@@ -356,6 +361,21 @@ impl Network {
                                 state.error = false;
                                 state.sync_request += 1;
                             }
+                            Request::Running(running) => {
+                                let mut state = worker.lock().unwrap();
+                                state.running = running;
+                                state.dirty = running;
+                                state.message.clear();
+                                state.error = false;
+                                pending.clear();
+                                if !running {
+                                    // In-flight connections must not apply a checkpoint
+                                    // after the user has paused synchronization.
+                                    state.generation += 1;
+                                    state.manual = None;
+                                    state.activity = None;
+                                }
+                            }
                             Request::Refresh => { worker.lock().unwrap().dirty = true; }
                             Request::Pair(text) => {
                                 ensure!(jobs.len() < 8, "Sync is busy; try again");
@@ -415,19 +435,22 @@ impl Network {
                     let sender = tx.clone();
                     if let Ok(job) = thread::Builder::new().name("carlitos-sync-in".into()).spawn(move || { let _ = accept(stream, address, &shared, &sender); }) { jobs.push((String::new(), job)); }
                 }
-                let (peers, reverse, dirty, generation) = {
+                let (peers, reverse, dirty, generation, automatic) = {
                     let mut state = worker.lock().unwrap();
                     if state.invitation.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.invitation = None; }
                     if state.pairing.as_ref().is_some_and(|(_, until)| Instant::now() >= *until) { state.pairing = None; }
                     let request = state.pairing.as_ref().map(|(i, _)| (i.device.clone(), i.ticket.clone()));
                     let offer = state.invitation.as_ref().filter(|(i, _)| !i.pin.is_empty()).map(|(i, _)| i.ticket.clone());
-                    if (request != advertised_request || offer != advertised_offer || state.sync_request != advertised_sync) && let Some((daemon, _)) = &mdns {
-                        if let Ok(info) = service_info(&state.config, state.pairing.as_ref().map(|(i, _)| i), state.invitation.as_ref().map(|(i, _)| i), state.sync_request) {
+                    // A completed request must not trigger an unsolicited exchange
+                    // when another paused device discovers us hours later.
+                    let sync_request = if state.manual.is_some() { state.sync_request } else { 0 };
+                    if (request != advertised_request || offer != advertised_offer || sync_request != advertised_sync) && let Some((daemon, _)) = &mdns {
+                        if let Ok(info) = service_info(&state.config, state.pairing.as_ref().map(|(i, _)| i), state.invitation.as_ref().map(|(i, _)| i), sync_request) {
                             let _ = daemon.register(info);
                         }
                         advertised_request = request;
                         advertised_offer = offer;
-                        advertised_sync = state.sync_request;
+                        advertised_sync = sync_request;
                     }
                     if let Some(started) = state.manual {
                         let missing: Vec<_> = state.config.peers.iter().filter(|p| state.online.get(&p.id).is_none_or(|seen| *seen < started)).map(|p| p.name.clone()).collect();
@@ -447,12 +470,15 @@ impl Network {
                     let reverse = discovered.iter().filter_map(|(id, ad)| reverse_peer(&state, id, ad)).collect::<Vec<_>>();
                     let status = state.status();
                     if last_status.as_ref() != Some(&status) { let _ = tx.send(Command::SyncStatus(status.clone())); last_status = Some(status); }
-                    (state.config.peers.clone(), reverse, std::mem::take(&mut state.dirty), state.generation)
+                    let automatic = state.running || state.manual.is_some();
+                    let dirty = std::mem::take(&mut state.dirty) && automatic;
+                    (state.config.peers.clone(), reverse, dirty, state.generation, automatic)
                 };
                 if dirty { pending.extend(peers.iter().map(|peer| peer.id.clone())); }
                 pending.retain(|id| peers.iter().any(|peer| &peer.id == id));
                 for (mut peer, ticket) in peers.into_iter().map(|p| (p, String::new())).chain(reverse) {
                     if jobs.len() >= 8 || jobs.iter().any(|(id, _)| *id == peer.id) { continue; }
+                    if !automatic && ticket.is_empty() && !pending.contains(&peer.id) { continue; }
                     if !pending.contains(&peer.id) && attempts.get(&peer.id).is_some_and(|t| t.elapsed() < Duration::from_secs(3)) { continue; }
                     if let Some(ad) = discovered.get(&peer.id) { peer.addresses = merge_addresses(&peer.addresses, &ad.addresses); }
                     attempts.insert(peer.id.clone(), Instant::now());
@@ -481,7 +507,6 @@ impl Network {
             state.rates = rates;
             state.dirty = true;
             state.sequence += 1;
-            state.activity = Some(Instant::now());
             if let Some(thread) = &self.thread {
                 thread.thread().unpark();
             }
@@ -490,7 +515,13 @@ impl Network {
     /// Give reachable peers a bounded opportunity to receive the final checkpoint.
     pub fn flush(&self) {
         let until = Instant::now() + Duration::from_millis(1500);
-        self.shared.lock().unwrap().dirty = true;
+        {
+            let mut state = self.shared.lock().unwrap();
+            if !state.running {
+                return;
+            }
+            state.dirty = true;
+        }
         loop {
             let state = self.shared.lock().unwrap();
             let pending = state.online.iter().any(|(id, seen)| {
@@ -684,6 +715,7 @@ fn connect(
     state.delivered.insert(peer.id.clone(), sequence);
     finish_pairing(&mut state, &peer.id, invitation, &peer.key);
     state.online.insert(peer.id, Instant::now());
+    state.activity = Some(Instant::now());
     let _ = tx.send(Command::SyncIncoming(received.records, received.rates));
     Ok(())
 }
@@ -771,6 +803,7 @@ fn accept(
         "Sync cancelled"
     );
     state.online.insert(hello.from.clone(), Instant::now());
+    state.activity = Some(Instant::now());
     state.delivered.insert(hello.from, sequence);
     Ok(())
 }
@@ -1051,6 +1084,65 @@ mod tests {
         assert!(connect(&b.shared, &b_tx, peer, &qr.ticket, 0).is_err());
         assert!(a.shared.lock().unwrap().config.peers.is_empty());
         assert!(Invitation::parse("https://example.com").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn sync_starts_paused_and_publications_wait_for_resume() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (a_tx, a_rx) = mpsc::channel();
+        let (b_tx, b_rx) = mpsc::channel();
+        let a_id = random_hex(16)?;
+        let a = Network::start_inner(
+            temp.path().join("a.json"),
+            a_id.clone(),
+            a_tx.clone(),
+            false,
+        )?;
+        let b = Network::start_inner(temp.path().join("b.json"), random_hex(16)?, b_tx, false)?;
+        assert!(!a.shared.lock().unwrap().status().running);
+        b.request(Request::Pair(invitation(&a, &a_rx)));
+        wait(
+            &b_rx,
+            |c| matches!(c, Command::SyncStatus(s) if s.peers.len() == 1),
+        );
+
+        let mut record = super::super::compact::tests::fixture().records.remove(0);
+        a.publish(vec![record.clone()], vec![]);
+        let quiet = |rx: &mpsc::Receiver<Command>, expected: &Record| {
+            let until = Instant::now() + Duration::from_millis(3400);
+            while let Ok(command) = rx.recv_timeout(until.saturating_duration_since(Instant::now()))
+            {
+                assert!(
+                    !matches!(command, Command::SyncIncoming(ref r, _) if r.contains(expected)),
+                    "Paused synchronization sent a checkpoint"
+                );
+            }
+        };
+        quiet(&b_rx, &record);
+        assert!(!a.shared.lock().unwrap().status().busy);
+        a.request(Request::Running(true));
+        wait(&a_rx, |c| matches!(c, Command::SyncStatus(s) if s.running));
+        wait(
+            &b_rx,
+            |c| matches!(c, Command::SyncIncoming(r, _) if r.contains(&record)),
+        );
+        a.request(Request::Running(false));
+        wait(&a_rx, |c| matches!(c, Command::SyncStatus(s) if !s.running));
+        record.position += 1000;
+        record.updated += 1;
+        a.publish(vec![record.clone()], vec![]);
+        quiet(&b_rx, &record);
+        // Explicit one-shot exchange remains available without starting retries.
+        a.request(Request::Now);
+        wait(
+            &b_rx,
+            |c| matches!(c, Command::SyncIncoming(r, _) if r.contains(&record)),
+        );
+        assert!(!a.shared.lock().unwrap().status().running);
+        drop(a);
+        let a = Network::start_inner(temp.path().join("a.json"), a_id, a_tx, false)?;
+        assert!(!a.shared.lock().unwrap().status().running);
         Ok(())
     }
 

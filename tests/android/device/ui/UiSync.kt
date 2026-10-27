@@ -39,6 +39,17 @@ internal fun UiSuite.scrollSyncTo(label: String) {
 
 @UnstableApi
 internal fun UiSuite.syncButtonChecks() {
+    call("page", "value" to 0)
+    Thread.sleep(350)
+    check(!call().getBoolean("sync_running")) { "Synchronization must start paused" }
+    val toggle = element("Start synchronization")
+    val refresh = element("Sync")
+    check(toggle.getDouble("h") >= 48 && toggle.getDouble("y") < refresh.getDouble("y"))
+    check(refresh.getDouble("x") > call().getDouble("width") / 2) { "Sync controls belong at bottom right" }
+    tap("Start synchronization")
+    eventually("Synchronization resumed") { call().getBoolean("sync_running") }
+    tap("Pause synchronization")
+    eventually("Synchronization paused") { !call().getBoolean("sync_running") }
     for (page in listOf(0, 3)) {
         call("page", "value" to page)
         Thread.sleep(350)
@@ -62,6 +73,7 @@ internal fun UiSuite.syncButtonChecks() {
             !state.getBoolean("sync_busy") && state.getString("sync_message") == "Synchronization complete"
         }
         capture("sync-complete-page-$page")
+        check(!call().getBoolean("sync_running")) { "One-shot sync must keep periodic exchange paused" }
     }
     scrollSyncTo("Synchronization")
     tap("Synchronization", "Checkbox")
