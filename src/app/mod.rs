@@ -1,9 +1,13 @@
 pub mod audio;
+mod book_removal;
 mod catalog;
 mod commands;
 mod demo;
 mod messages;
 // Exercise the platform-independent Android event buffer on the host too.
+#[cfg(all(test, not(target_os = "android")))]
+#[path = "../android/ui/back.rs"]
+mod android_back;
 #[cfg(all(test, not(target_os = "android")))]
 #[path = "../android/runtime/pending.rs"]
 mod android_events;
@@ -31,7 +35,7 @@ use audio::{Audio, Playback};
 use std::{path::PathBuf, sync::mpsc::Sender, time::Instant};
 pub use ui::Ui;
 
-pub use messages::{Command, Event};
+pub use messages::{BookEdit, Command, Event};
 
 pub struct Options {
     pub database: PathBuf,
@@ -92,9 +96,11 @@ impl Controller {
         }
     }
     fn emit_drafts(&self) {
-        let _ = self
-            .events
-            .try_send(Event::Drafts(self.drafts.clone(), self.issues.clone()));
+        let _ = self.events.try_send(Event::Drafts(
+            self.scan_generation,
+            self.drafts.clone(),
+            self.issues.clone(),
+        ));
     }
     fn store(&mut self) -> Result<&mut Store> {
         match self.store.as_mut() {

@@ -165,11 +165,7 @@ impl Store {
                     }
                 }
             }
-            tx.execute(
-                "UPDATE media_files SET uri=?1,identity=?2,size=?3,modified=?4,data=?5,source_id=?7,relative=?8 WHERE id=?6",
-                params![file.uri, file.identity, super::stored_size(file.size)?, file.modified.unwrap_or(-1),
-                    serde_json::to_string(file)?, file.id, file.source_id, file.relative],
-            )?;
+            super::sources::update_document_location(&tx, file)?;
         }
         tx.commit()?;
         self.load()

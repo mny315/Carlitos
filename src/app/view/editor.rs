@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_COVER_REQUEST: AtomicU64 = AtomicU64::new(1);
 static NEXT_PICKER_OWNER: AtomicU64 = AtomicU64::new(1);
 
-/// A picker belongs to one editing session, even when the same book is reopened.
+/// Pickers and save/import completions belong to one interaction, even when
+/// the same book or folder is reopened.
 /// Keep this token across Activity recreation, but never reuse it in a new View.
 pub fn renew_picker_owner(window: &AppWindow) -> slint::SharedString {
     let owner: slint::SharedString = NEXT_PICKER_OWNER

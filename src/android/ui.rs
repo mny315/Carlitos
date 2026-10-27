@@ -1,4 +1,5 @@
 //! Activity callbacks enter Slint's thread; no Activity or UI handle is kept in JNI.
+mod back;
 mod saved;
 pub use saved::restore;
 
@@ -7,7 +8,6 @@ use slint::ComponentHandle;
 use std::{
     cell::{Cell, RefCell},
     rc::Weak,
-    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
 
@@ -18,6 +18,7 @@ thread_local! {
 }
 
 pub fn attach(ui: &app::Ui) {
+    BACK_REQUESTS.invalidate();
     VIEW.set(std::rc::Rc::downgrade(&ui.view));
     WINDOW.set(ui.window.as_weak());
     let window = ui.window.as_weak();
@@ -45,10 +46,10 @@ pub fn attach(ui: &app::Ui) {
 }
 
 pub fn detach(ui: &app::Ui) {
+    BACK_REQUESTS.invalidate();
     ui.window.global::<State>().set_ui_visible(false);
     crate::visualizer::set_enabled(false);
     i_slint_backend_android_activity::set_touch_filter(None);
-    BACK_PENDING.store(false, Ordering::Relaxed);
     // TextInput keeps an IME composition outside its bound text property.
     // Commit it on focus loss before saving the draft for the next Activity.
     ui.window.invoke_dismiss_keyboard();
@@ -57,18 +58,27 @@ pub fn detach(ui: &app::Ui) {
     VIEW.set(Weak::default());
 }
 
-static BACK_PENDING: AtomicBool = AtomicBool::new(false);
+static BACK_REQUESTS: back::BackRequests = back::BackRequests::new();
 pub fn keyboard_hidden() {
     IME_HIDDEN.set(Some(Instant::now()));
 }
 pub fn back() {
     // NativeActivity can deliver the same Back through more than one input
     // route within a frame. Coalesce before changing focus or dismissing a modal.
-    if BACK_PENDING.swap(true, Ordering::Relaxed) {
+    let Some(request) = BACK_REQUESTS.claim() else {
         return;
-    }
-    if slint::invoke_from_event_loop(|| {
-        slint::Timer::single_shot(Duration::from_millis(32), || {
+    };
+    if slint::invoke_from_event_loop(move || {
+        if !BACK_REQUESTS.is_current(request) {
+            return;
+        }
+        slint::Timer::single_shot(Duration::from_millis(32), move || {
+            // A delayed Back belongs to the Activity which received it. An
+            // older timer must neither navigate a recreated UI nor release
+            // the coalescing flag of that UI's own newer Back request.
+            if !BACK_REQUESTS.is_current(request) {
+                return;
+            }
             // An IME-consumed key can also arrive in NativeActivity's queue
             // after the inset update. It must not navigate the page as well.
             let ime_consumed = IME_HIDDEN
@@ -83,12 +93,12 @@ pub fn back() {
                     }
                 }
             });
-            BACK_PENDING.store(false, Ordering::Relaxed);
+            BACK_REQUESTS.release(request);
         })
     })
     .is_err()
     {
-        BACK_PENDING.store(false, Ordering::Relaxed);
+        BACK_REQUESTS.release(request);
     }
 }
 

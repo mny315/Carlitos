@@ -100,8 +100,13 @@ internal fun UiSuite.presentationChecks(title: String, packageName: String, cont
     tap("Navigation menu")
     check(call().getInt("overlay") == 0 && call().getInt("haptic_buttons") == timeHaptics + 1)
     call("action", "name" to "begin-edit", "arg" to book)
+    check(element("Done").getDouble("x") > call().getDouble("width") / 2) { "Edit book Done belongs at the right" }
     tap("Part order")
-    check(element("Done").getDouble("y") < call().getDouble("height") / 3) { "Part order Done belongs in the header" }
+    check(element("Done").getDouble("y") < call().getDouble("height") / 3) { "Part order Done belongs near the book summary" }
+    check(element("Done").getDouble("x") > call().getDouble("width") / 2) { "Part order Done belongs at the right" }
+    val summaryPlay = element("Play / pause")
+    check(kotlin.math.abs(element("Done").getDouble("y") - summaryPlay.getDouble("y")) < .1) { "Part order Done belongs beside Play" }
+    check(element("Done").getDouble("x") + element("Done").getDouble("w") <= summaryPlay.getDouble("x")) { "Part order Done must sit immediately before Play" }
     capture("part-order")
     tap("Done")
     if (controlsOnly) return

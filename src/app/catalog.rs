@@ -16,6 +16,7 @@ impl Controller {
         }
         let tx = self.tx.clone();
         let cancelled = self.tag_control.cancelled.clone();
+        self.reap_workers();
         if let Ok(worker) = std::thread::Builder::new()
             .name("carlitos-tags".into())
             .spawn(move || {
@@ -43,41 +44,45 @@ impl Controller {
         }
     }
     pub(super) fn complete(&mut self, book: Id) -> Result<()> {
-        let active = self.active_book() == Some(book);
-        let last = self
-            .library
-            .book_parts(book)
-            .last()
-            .copied()
-            .cloned()
-            .context("Book has no parts")?;
-        let position = self
-            .library
-            .media(last.file_id)
-            .and_then(|m| m.duration)
-            .unwrap_or(0);
+        self.complete_books(&[book])
+    }
+    pub(super) fn complete_books(&mut self, books: &[Id]) -> Result<()> {
+        let active = self.active_book().is_some_and(|id| books.contains(&id));
         let mut progress = self.library.progress.clone();
-        progress.retain(|p| p.book_id != book);
-        progress.push(Progress {
-            book_id: book,
-            part_id: last.id,
-            position,
-            completed: true,
-            updated: now_millis().max(
-                self.library
-                    .progress
+        for &book in books {
+            let last = self
+                .library
+                .book_parts(book)
+                .last()
+                .copied()
+                .cloned()
+                .context("Book has no parts")?;
+            let position = self
+                .library
+                .media(last.file_id)
+                .and_then(|m| m.duration)
+                .unwrap_or(0);
+            let updated = now_millis().max(
+                progress
                     .iter()
                     .find(|p| p.book_id == book)
                     .map_or(0, |p| p.updated.saturating_add(1)),
-            ),
-        });
+            );
+            progress.retain(|p| p.book_id != book);
+            progress.push(Progress {
+                book_id: book,
+                part_id: last.id,
+                position,
+                completed: true,
+                updated,
+            });
+        }
         let mut session = self.library.session.clone();
         if active {
             session.current = None;
             session.position = 0;
         }
-        // Commit before stopping audio or publishing the new progress. A
-        // rejected write must leave the current listening session intact.
+        // Commit the entire group before stopping playback or publishing progress.
         if !self.options.demo {
             self.store()?.save(&session, &progress)?;
             self.checkpoint = std::time::Instant::now();
@@ -91,20 +96,28 @@ impl Controller {
         Ok(())
     }
     pub(super) fn reset_progress(&mut self, book: Id) -> Result<()> {
-        if !self.library.progress.iter().any(|p| p.book_id == book) {
+        self.reset_books_progress(&[book])
+    }
+    pub(super) fn reset_books_progress(&mut self, books: &[Id]) -> Result<()> {
+        if !self
+            .library
+            .progress
+            .iter()
+            .any(|p| books.contains(&p.book_id))
+        {
             return Ok(());
         }
         self.save()?;
         if !self.options.demo {
-            self.store()?.reset_book_progress(book)?;
+            self.store()?.reset_books_progress(books)?;
         }
-        // Commit first; a failed reset must leave the player and its
-        // progress intact. Stop invalidates queued playback snapshots.
-        if self.active_book() == Some(book) {
+        if self.active_book().is_some_and(|id| books.contains(&id)) {
             self.stop();
             self.pending_save = false;
         }
-        self.library.progress.retain(|p| p.book_id != book);
+        self.library
+            .progress
+            .retain(|p| !books.contains(&p.book_id));
         self.emit_library();
         Ok(())
     }
@@ -123,6 +136,7 @@ impl Controller {
                 .join("covers")
         };
         let events = self.events.clone();
+        self.reap_workers();
         let worker = std::thread::Builder::new()
             .name("carlitos-custom-cover".into())
             .spawn(move || {
@@ -195,15 +209,8 @@ impl Controller {
         self.reconcile(library);
         Ok(())
     }
-    pub(super) fn edit(
-        &mut self,
-        id: Id,
-        title: String,
-        author: String,
-        order: Vec<Id>,
-        cover: Option<String>,
-    ) -> Result<()> {
-        if title.trim().is_empty() {
+    pub(super) fn edit(&mut self, id: Id, edit: super::BookEdit, order: Vec<Id>) -> Result<()> {
+        if edit.title.trim().is_empty() {
             bail!(
                 "{}",
                 text("Название не может быть пустым", "Title cannot be empty")
@@ -215,11 +222,15 @@ impl Controller {
         } else {
             order
         };
-        let library =
-            self.store()?
-                .edit_book(id, title.trim().into(), author.trim().into(), order, cover)?;
+        let library = self.store()?.edit_book(
+            id,
+            edit.title.trim().into(),
+            edit.author.trim().into(),
+            order,
+            edit.cover.clone(),
+        )?;
         self.reconcile(library);
-        let _ = self.events.try_send(Event::BookEdited(id));
+        let _ = self.events.try_send(Event::BookEdited(id, edit));
         Ok(())
     }
 }

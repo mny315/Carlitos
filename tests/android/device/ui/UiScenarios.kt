@@ -8,7 +8,7 @@ import androidx.media3.common.util.UnstableApi
 internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = false, inputOnly: Boolean = false,
     pauseOnly: Boolean = false, requireBluetooth: Boolean = false, sourceSelectionOnly: Boolean = false,
     feedbackOnly: Boolean = false, settingsOnly: Boolean = false, backgroundOnly: Boolean = false,
-    presentationOnly: Boolean = false) {
+    presentationOnly: Boolean = false, bookSelectionOnly: Boolean = false) {
     check(instrumentation.targetContext.packageName.endsWith(".playbacktest"))
     val originalFont = shell("settings get system font_scale")
     val originalSize = shell("wm size").lineSequence().firstOrNull { it.startsWith("Override size:") }?.substringAfter(":")?.trim()
@@ -23,6 +23,12 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
         instrumentation.startActivitySync(Intent(instrumentation.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         main { Bridge.activity.get()!!.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
         eventually("UI startup") { try { call().getDouble("width") > 0 } catch (_: Exception) { false } }
+        if (bookSelectionOnly) {
+            grantFixtures(instrumentation, ui = true)
+            call("setup")
+            bookSelectionChecks()
+            return
+        }
         if (feedbackOnly) {
             call("setup")
             feedbackChecks()
@@ -79,6 +85,7 @@ internal fun UiSuite.run(libraryOnly: Boolean = false, chaptersOnly: Boolean = f
             settingsScrollChecks()
             feedbackChecks()
         }
+        bookSelectionChecks()
         bookSwipeChecks(title)
         if (libraryOnly) return
         chapterPlaybackChecks(title)

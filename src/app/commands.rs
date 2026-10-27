@@ -13,6 +13,7 @@ impl Controller {
                 command,
                 Playback(_)
                     | AudioFailed(..)
+                    | AudioAbsent(_)
                     | Error(_)
                     | AudioStopped
                     | ScanDone(..)
@@ -56,7 +57,7 @@ impl Controller {
         // A file returned by Android's picker imports immediately, without
         // passing through the folder preview's Import command.
         #[cfg(target_os = "android")]
-        let imports_document = matches!(&command, OpenDocument(_));
+        let imports_document = matches!(&command, OpenDocument(..));
         #[cfg(not(target_os = "android"))]
         let imports_document = false;
         if self.maintenance
@@ -66,6 +67,9 @@ impl Controller {
                     Edit(..)
                         | MovePart(..)
                         | ResetProgress(_)
+                        | CompleteBooks(..)
+                        | ResetBooksProgress(..)
+                        | RemoveBooks(..)
                         | RemoveBook(_)
                         | RemoveSource(_)
                         | RemoveSources(_)
@@ -73,7 +77,7 @@ impl Controller {
                         | Rescan(_)
                         | UpdateFolder(..)
                         | Scan(..)
-                        | Import
+                        | Import(..)
                 ))
         {
             bail!(
@@ -89,12 +93,15 @@ impl Controller {
                 || matches!(
                     command,
                     RemoveBook(_)
+                        | CompleteBooks(..)
+                        | ResetBooksProgress(..)
+                        | RemoveBooks(..)
                         | RemoveSource(_)
                         | RemoveSources(_)
                         | ResetProgress(_)
                         | Relocate(..)
                         | UpdateFolder(..)
-                        | Import
+                        | Import(..)
                 ))
         {
             bail!(
@@ -150,7 +157,7 @@ impl Controller {
                 let _ = self.events.try_send(Event::Picked(kind, uri, name, owner));
             }
             #[cfg(target_os = "android")]
-            OpenDocument(file) => {
+            OpenDocument(file, owner) => {
                 self.save()?;
                 let uri = file.uri.clone();
                 let identity = file.identity.clone();
@@ -158,7 +165,7 @@ impl Controller {
                     root_uri: uri.clone(),
                     title: file.title.clone(),
                     author: file.artist.clone(),
-                    files: vec![file],
+                    files: vec![*file],
                     include: true,
                 }])?;
                 self.reconcile(library);
@@ -180,17 +187,22 @@ impl Controller {
                     .find(|p| p.part_id == part && !p.completed)
                     .map_or(0, |p| p.position);
                 self.load(part, position, true)?;
-                let _ = self.events.try_send(Event::Imported);
+                let _ = self
+                    .events
+                    .try_send(Event::Imported(self.scan_generation, owner));
             }
             Resume(book) => self.resume(book)?,
             Part(id, position) => self.load(id, position, true)?,
             Toggle => self.play(!self.playback.playing)?,
             Playing(value) => self.play(value)?,
             Stop => {
-                self.save()?;
+                // Confirmed progress stays in memory when the selection is
+                // cleared. Stop audio and update the view even if persisting
+                // that checkpoint fails (for example on a full disk).
                 self.stop();
-                self.save()?;
+                let saved = self.save();
                 self.emit_library();
+                saved?;
             }
             Next(forward) => {
                 if let Some(Target::Book(id)) = self.library.neighbour(forward) {
@@ -231,16 +243,32 @@ impl Controller {
                 self.seek_to(position);
             }
             Volume(volume) => self.set_volume(volume, self.library.session.muted)?,
+            VolumeStep(forward) => self.set_volume(
+                self.library.session.volume + if forward { 0.05 } else { -0.05 },
+                self.library.session.muted,
+            )?,
             Rate(rate) => self.set_rate(rate)?,
             RateStep(forward) => self.step_rate(forward)?,
             SkipSilence(enabled) => self.set_skip_silence(enabled)?,
             Mute => self.set_volume(self.library.session.volume, !self.library.session.muted)?,
             Complete(book) => self.complete(book)?,
             ResetProgress(book) => self.reset_progress(book)?,
+            CompleteBooks(books, selection) => {
+                self.complete_books(&books)?;
+                let _ = self.events.try_send(Event::BooksChanged(selection));
+            }
+            ResetBooksProgress(books, selection) => {
+                self.reset_books_progress(&books)?;
+                let _ = self.events.try_send(Event::BooksChanged(selection));
+            }
+            RemoveBooks(books, files, selection) => {
+                self.remove_books(&books, files)?;
+                let _ = self.events.try_send(Event::BooksChanged(selection));
+            }
             PrepareCover(request, path) => self.prepare_cover(request, path)?,
             TagsRead(files) => self.tags_read(files)?,
             MovePart(id, forward) => self.move_part(id, forward)?,
-            Edit(id, title, author, order, cover) => self.edit(id, title, author, order, cover)?,
+            Edit(id, edit, order) => self.edit(id, edit, order)?,
             RemoveBook(id) => {
                 self.save()?;
                 let library = self.store()?.remove_book(id)?;
@@ -311,16 +339,19 @@ impl Controller {
                     .try_send(Event::Scanning(false, text("Отменено", "Cancelled").into()));
             }
             ScanDone(generation, result) => self.scan_done(generation, result)?,
-            DraftEdit(index, title, author, included) => {
-                if let Some(draft) = self.drafts.get_mut(index) {
+            DraftEdit(generation, index, title, author, included) => {
+                if generation == self.scan_generation
+                    && let Some(draft) = self.drafts.get_mut(index)
+                {
                     draft.title = title;
                     draft.author = author;
                     draft.include = included;
                     self.emit_drafts();
                 }
             }
-            DraftFile(draft, uri, action) => {
-                if let Some(draft) = self.drafts.get_mut(draft)
+            DraftFile(generation, draft, uri, action) => {
+                if generation == self.scan_generation
+                    && let Some(draft) = self.drafts.get_mut(draft)
                     && let Some(index) = draft.files.iter().position(|file| file.uri == uri)
                 {
                     match action.as_str() {
@@ -336,7 +367,11 @@ impl Controller {
                     self.emit_drafts();
                 }
             }
-            Import => self.import()?,
+            Import(generation, owner) => {
+                if generation == self.scan_generation {
+                    self.import(owner)?;
+                }
+            }
             Settings(mut settings) => {
                 // Rate is confirmed by the audio worker, independently of appearance changes.
                 settings.playback_rate = self.options.settings.playback_rate;
@@ -361,6 +396,13 @@ impl Controller {
             }
             Playback(snapshot) => return self.receive_playback(snapshot),
             AudioFailed(token, message) => return self.receive_audio_failure(token, message),
+            AudioAbsent(token) => {
+                // A queued Stop/Snapshot reply can outlive its request and
+                // arrive after a new load has already selected another token.
+                if token == self.token {
+                    return self.handle(AudioStopped);
+                }
+            }
             Error(message) => self.notice(message),
             AudioStopped => {
                 self.playback.playing = false;

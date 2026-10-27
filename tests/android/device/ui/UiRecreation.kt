@@ -236,6 +236,16 @@ internal fun UiSuite.recreatedEdits(title: String) {
     recreate()
     eventually("Draft restored") { call().getInt("selected_draft") == 0 }
     check(call().getString("draft_title") == draftTitle && call().getInt("draft_files") == 1)
+    whileDetached {
+        val playback = PlaybackSuite(instrumentation)
+        playback.call("scan", "uri" to folder.toString())
+        eventually("Replacement preview completed while detached") {
+            playback.call("state").getInt("drafts") == 1
+        }
+    }
+    eventually("Replacement preview restored") { call().getInt("drafts") == 1 && !call().getBoolean("scanning") }
+    check(call().getInt("selected_draft") == -1) { "Recreation reopened an editor from an older scan: ${call()}" }
+    tap("Review parts")
     whileDetached { PlaybackSuite(instrumentation).call("cancel_scan") }
     eventually("Cancelled draft list restored") { call().getInt("page") == 2 && call().getInt("drafts") == 0 }
     check(call().getInt("selected_draft") == -1) { "Recreation reopened a draft that no longer exists: ${call()}" }
@@ -243,7 +253,8 @@ internal fun UiSuite.recreatedEdits(title: String) {
     eventually("Rescan completed") { call().getInt("drafts") == 1 && !call().getBoolean("scanning") }
     if (elements().none { it.getString("label") == "Review parts" }) tap("Show discovered books")
     tap("Review parts")
-    whileDetached { PlaybackSuite(instrumentation).call("import") }
+    val importOwner = call().getString("picker_owner")
+    whileDetached { PlaybackSuite(instrumentation).call("import", "owner" to importOwner) }
     eventually("Background import returned to library") { call().getInt("page") == 0 && call().getInt("selected_draft") == -1 }
     call("page", "value" to 4)
     Thread.sleep(350)

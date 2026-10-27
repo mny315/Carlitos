@@ -126,6 +126,35 @@ pub(super) fn duration_checks(
             .is_some_and(|part| part.detail == "0:12"),
         "duration learned during playback updates the parts list",
     );
+    let mut completed = original.clone();
+    completed.books.retain(|book| book.id == 1);
+    completed.parts.retain(|part| part.id == 103);
+    completed.media.retain(|file| file.id == 103);
+    completed.session.current = Some(carlitos::library::Target::Book(103));
+    completed.update_progress(12_000, true);
+    view.borrow_mut().event(Event::Library(Box::new(completed)));
+    view.borrow_mut().event(Event::Playback(Playback {
+        position: 11_990,
+        duration: Some(12_100),
+        phase: carlitos::player::Phase::Ready,
+        preserve_progress: true,
+        ..Default::default()
+    }));
+    check(
+        state.get_current().completed && state.get_selected().completed,
+        "paused restore keeps completion despite decoder rounding and different duration",
+    );
+    view.borrow_mut().event(Event::Playback(Playback {
+        position: 6_000,
+        duration: Some(12_100),
+        phase: carlitos::player::Phase::Ready,
+        seek_done: true,
+        ..Default::default()
+    }));
+    check(
+        !state.get_current().completed && !state.get_selected().completed,
+        "an explicit paused seek can still clear completion",
+    );
     let playback = Playback {
         position: original.session.position,
         duration: original.active_file().and_then(|file| file.duration),

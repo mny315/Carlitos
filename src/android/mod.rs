@@ -137,10 +137,7 @@ fn run(android: AndroidApp) -> Result<()> {
             let Some(window) = window.upgrade() else {
                 return;
             };
-            let owner = match kind {
-                "cover" | "source" => app::view::renew_picker_owner(&window),
-                _ => Default::default(),
-            };
+            let owner = app::view::renew_picker_owner(&window);
             if let Err(error) = bridge::dispatch(
                 serde_json::json!({"op":"pick", "kind":kind, "owner":owner.as_str()}),
             ) {

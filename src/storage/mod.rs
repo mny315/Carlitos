@@ -177,6 +177,9 @@ impl Store {
         Ok(())
     }
     pub fn reset_book_progress(&mut self, id: Id) -> Result<()> {
+        self.reset_books_progress(&[id])
+    }
+    pub fn reset_books_progress(&mut self, ids: &[Id]) -> Result<()> {
         let tx = self.conn.transaction()?;
         let mut session = load_session(&tx)?;
         if let Some(Target::Book(part)) = session.current
@@ -185,13 +188,15 @@ impl Store {
                     r.get::<_, Id>(0)
                 })
                 .optional()?
-                == Some(id)
+                .is_some_and(|id| ids.contains(&id))
         {
             session.current = None;
             session.position = 0;
         }
-        tx.execute("INSERT INTO sync_changes SELECT id,?2,(SELECT id FROM sync_identity),1 FROM books WHERE id=?1 ON CONFLICT(book_id) DO UPDATE SET updated=MAX(excluded.updated,sync_changes.updated+1),device=excluded.device,reset=1", params![id, now_millis()])?;
-        tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
+        for &id in ids {
+            tx.execute("INSERT INTO sync_changes SELECT id,?2,(SELECT id FROM sync_identity),1 FROM books WHERE id=?1 ON CONFLICT(book_id) DO UPDATE SET updated=MAX(excluded.updated,sync_changes.updated+1),device=excluded.device,reset=1", params![id, now_millis()])?;
+            tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
+        }
         save_session(&tx, &session)?;
         tx.commit()?;
         Ok(())
@@ -238,7 +243,7 @@ impl Store {
             return Ok(false);
         };
         let mut media: Media = serde_json::from_str(&data)?;
-        if media.sort_tags_read {
+        if media.sort_tags_read || media.modified_subsec_nanos != original.modified_subsec_nanos {
             return Ok(false);
         }
         media.year = tags.year;
@@ -255,9 +260,25 @@ impl Store {
         )? > 0)
     }
     pub fn remove_book(&mut self, id: Id) -> Result<Library> {
+        self.remove_books(&[id])
+    }
+    pub fn remove_books(&mut self, ids: &[Id]) -> Result<Library> {
+        self.remove_books_with(ids, || Ok(()))
+    }
+    pub(crate) fn remove_books_with(
+        &mut self,
+        ids: &[Id],
+        before_commit: impl FnOnce() -> Result<()>,
+    ) -> Result<Library> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM books WHERE id=?1", [id])?;
+        for &id in ids {
+            tx.execute("DELETE FROM books WHERE id=?1", [id])?;
+        }
+        sources::remove_empty_book_sources(&tx)?;
         save_session(&tx, &load_session(&tx)?)?;
+        // Validate every database deletion before touching external files.
+        // A provider failure rolls back the records, allowing a retry.
+        before_commit()?;
         tx.commit()?;
         self.load()
     }

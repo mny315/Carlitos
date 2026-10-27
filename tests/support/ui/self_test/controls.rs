@@ -187,6 +187,26 @@ pub(super) fn step(
                 (s.get_rate() - 1.6).abs() < 0.001,
                 "rapid speed increments are not collapsed into one change",
             );
+            s.invoke_set_volume(0.4);
+            s.set_overlay(7);
+        }
+        14 => {
+            check(
+                (s.get_volume() - 0.4).abs() < 0.001,
+                "volume preset acknowledged",
+            );
+            let size = w.window().size().to_logical(w.window().scale_factor());
+            let x = size.width / 2. + if s.get_compact() { 118. } else { 180. };
+            let y = size.height / 2. + 35.;
+            click(&w, x, y);
+            click(&w, x, y);
+        }
+        15 => {
+            check(
+                (s.get_volume() - 0.5).abs() < 0.001,
+                "rapid volume increments are not collapsed into one change",
+            );
+            key(&w, Key::Escape);
             s.set_language_index(1);
             w.global::<Theme>().set_reduced_motion(false);
             s.invoke_settings_changed();

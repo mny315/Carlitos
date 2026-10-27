@@ -115,7 +115,8 @@ object Bridge {
                 // Android may have released it while the app was in background.
                 // Acknowledge its absence so Rust saves its confirmed position
                 // and can also complete a pending shutdown without a timeout.
-                emit("service_stopped")
+                // Keep the request token: a new load may already be queued in Rust.
+                emit("audio_absent", "token" to audioToken)
             }
             else {
                 check(pending.size < 64) { "Playback service did not start" }

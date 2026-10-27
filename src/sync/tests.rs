@@ -18,10 +18,13 @@ fn fixture(root: &Path, name: &str, content: &[u8]) -> Result<(Store, Library)> 
         include: true,
         files: vec![Media {
             uri: file_uri(&path)?,
-            identity: name.into(),
+            identity: crate::platform::identity(&path)?,
             relative: "renamed.mp3".into(),
             size: Some(content.len() as u64),
-            modified: Some(1),
+            modified: Some(crate::platform::modified(&std::fs::metadata(&path)?)),
+            modified_subsec_nanos: crate::platform::modified_subsec_nanos(&std::fs::metadata(
+                &path,
+            )?),
             duration: Some(120_000),
             ..Default::default()
         }],
@@ -35,6 +38,62 @@ fn progress(store: &mut Store, library: &mut Library, position: u64) -> Result<V
     library.update_progress(position, false);
     store.save(&library.session, &library.progress)?;
     store.sync_records(library)
+}
+
+#[test]
+fn a_large_sync_index_preserves_order_occurrences_and_excludes_incomplete_books() {
+    let mut library = Library::default();
+    for book in 1..=MAX_RECORDS as Id {
+        library.books.push(Book {
+            id: book,
+            source_id: book,
+            title: book.to_string(),
+            author: String::new(),
+            cover: None,
+        });
+        for file in [book * 2, book * 2 + 1] {
+            library.media.push(Media {
+                id: file,
+                uri: format!("file:///{file}.wav"),
+                ..Default::default()
+            });
+        }
+        for ordinal in 0..3 {
+            library.parts.push(Part {
+                id: book * 3 + ordinal as Id,
+                book_id: book,
+                file_id: book * 2 + (ordinal % 2) as Id,
+                title: String::new(),
+                ordinal,
+            });
+        }
+    }
+    library.parts.reverse();
+    let fingerprints: Vec<_> = library
+        .media
+        .iter()
+        .skip(1)
+        .map(|media| Fingerprint {
+            file: media.id,
+            signature: Fingerprint::signature(media),
+            hash: format!("{:064x}", media.id),
+        })
+        .collect();
+    let started = std::time::Instant::now();
+    let index = Index::new(&library, &fingerprints);
+    println!("Index of {} books: {:?}", MAX_RECORDS, started.elapsed());
+    assert_eq!(index.books.len(), MAX_RECORDS - 1);
+    assert!(!index.books.contains_key(&1));
+    for (&id, book) in &index.books {
+        assert_eq!(
+            book.parts,
+            vec![
+                (id * 3, format!("{:064x}", id * 2), 0),
+                (id * 3 + 1, format!("{:064x}", id * 2 + 1), 0),
+                (id * 3 + 2, format!("{:064x}", id * 2), 1),
+            ]
+        );
+    }
 }
 
 #[test]
@@ -232,14 +291,41 @@ fn full_content_hash_detects_changes_in_the_middle_and_cache_checks_file_signatu
     let (store, mut library) = fixture(temp.path(), "a", &bytes)?;
     let original = store.fingerprints()?;
     assert_eq!(Index::new(&library, &original).books.len(), 1);
-    library.media[0].modified = Some(2);
+    library.media[0].modified = library.media[0].modified.map(|value| value + 1);
     assert!(Index::new(&library, &original).books.is_empty());
     let mut changed = bytes;
     changed[400_000] = 43;
-    std::fs::write(local_path(&library.media[0].uri).unwrap(), changed)?;
+    let path = local_path(&library.media[0].uri).unwrap();
+    std::fs::write(&path, changed)?;
+    library.media[0].modified = Some(crate::platform::modified(&std::fs::metadata(&path)?));
+    library.media[0].modified_subsec_nanos =
+        crate::platform::modified_subsec_nanos(&std::fs::metadata(&path)?);
     let hash = Fingerprint::read(&library.media[0], &AtomicBool::new(false))?;
     assert_ne!(original[0].hash, hash.hash);
     assert!(Fingerprint::read(&library.media[0], &AtomicBool::new(true)).is_err());
+    Ok(())
+}
+
+#[test]
+fn fingerprint_rejects_stale_metadata_and_replaced_files() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (store, library) = fixture(temp.path(), "changed", b"original recording")?;
+    let media = &library.media[0];
+    let path = local_path(&media.uri).unwrap();
+    let cancelled = AtomicBool::new(false);
+    let mut stale = media.clone();
+    stale.modified = stale.modified.map(|value| value + 1);
+    assert!(Fingerprint::read(&stale, &cancelled).is_err());
+    std::fs::write(&path, b"a longer and different recording")?;
+    assert!(Fingerprint::read(media, &cancelled).is_err());
+    // Keep the old file alive so the filesystem cannot recycle its identity.
+    std::fs::rename(&path, path.with_extension("old"))?;
+    std::fs::write(&path, b"original recording")?;
+    assert!(Fingerprint::read(media, &cancelled).is_err());
+    assert_eq!(
+        store.fingerprints()?[0].signature,
+        Fingerprint::signature(media)
+    );
     Ok(())
 }
 

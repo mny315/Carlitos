@@ -1,4 +1,5 @@
 mod document_paths;
+mod stable_ids;
 
 use super::Store;
 use crate::library::{Id, Session, local_path};
@@ -17,7 +18,7 @@ impl Store {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .context("Read library schema version")?;
-        if version > 7 {
+        if version > 8 {
             bail!(tformat!(
                 "Библиотека создана более новой версией Carlitos (схема {version})",
                 version = version
@@ -30,7 +31,7 @@ impl Store {
             // write lock, then commit all legacy steps together.
             let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-            anyhow::ensure!(version <= 7, "Library schema changed during migration");
+            anyhow::ensure!(version <= 8, "Library schema changed during migration");
             if version == 0 {
                 tx.execute_batch(include_str!("schema.sql"))?;
                 tx.pragma_update(None, "user_version", 1)?;
@@ -108,6 +109,13 @@ impl Store {
         if version < 7 {
             super::sync::migrate_rates(&mut conn)?;
         }
+        if version < 8 {
+            stable_ids::migrate(&mut conn)?;
+        }
+        // Repair empty per-book sources left by older removal behavior too.
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        super::sources::remove_empty_book_sources(&tx)?;
+        tx.commit()?;
         Ok(Self { conn })
     }
 }

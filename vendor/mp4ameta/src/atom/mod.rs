@@ -349,7 +349,7 @@ pub(crate) fn read_tag(reader: &mut (impl Read + Seek), cfg: &ReadConfig) -> cra
     };
 
     let mvhd = moov.mvhd;
-    let duration = scale_duration(mvhd.timescale, mvhd.duration);
+    let duration = scale_duration(mvhd.timescale, mvhd.duration)?;
 
     let meta_items = moov
         .udta
@@ -370,7 +370,7 @@ pub(crate) fn read_tag(reader: &mut (impl Read + Seek), cfg: &ReadConfig) -> cra
 
             for c in chpl {
                 chapter_list.push(Chapter {
-                    start: scale_duration(chpl_timescale, c.start),
+                    start: scale_duration(chpl_timescale, c.start)?,
                     title: c.title,
                 });
             }
@@ -553,8 +553,8 @@ fn read_track_chapters<T: ChunkOffsetInt>(
                     ));
                 };
 
-                let title = read_chapter_title(reader, current_offset)?;
-                chapters.push(Chapter { start: scale_duration(timescale, time), title });
+                let title = read_chapter_title(reader, current_offset, size)?;
+                chapters.push(Chapter { start: scale_duration(timescale, time)?, title });
 
                 time += duration as u64;
 
@@ -568,9 +568,30 @@ fn read_track_chapters<T: ChunkOffsetInt>(
     Ok(())
 }
 
-fn read_chapter_title(reader: &mut (impl Read + Seek), offset: u64) -> crate::Result<String> {
+fn read_chapter_title(
+    reader: &mut (impl Read + Seek),
+    offset: u64,
+    sample_size: u32,
+) -> crate::Result<String> {
+    if sample_size < 2 {
+        return Err(crate::Error::new(
+            ErrorKind::InvalidSampleTable,
+            "Chapter sample is missing its title length",
+        ));
+    }
     reader.seek(SeekFrom::Start(offset))?;
     let len = reader.read_be_u16()?;
+    if u32::from(len) > sample_size - 2 {
+        return Err(crate::Error::new(
+            ErrorKind::InvalidSampleTable,
+            "Chapter title exceeds its sample size",
+        ));
+    }
+    // A short UTF-8 title has no room for a BOM. Do not read into the
+    // following sample or subtract two from an unsigned zero/one length.
+    if len < 2 {
+        return reader.read_utf8(u64::from(len));
+    }
     let bom = reader.read_be_u16()?;
 
     // check BOM (byte order mark) for encoding

@@ -43,7 +43,7 @@ export component PlaybackSheet inherits Rectangle {
                         text: "−"; min-width: 52px;
                         accessible-label: root.speed ? Theme.t("Медленнее", "Slower") : Theme.t("Тише", "Lower volume");
                         enabled: root.speed ? State.rate > 0.5 : State.volume > 0;
-                        clicked => { if (root.speed) { State.action("rate-down", ""); } else { State.set-volume(max(0, State.volume - 0.05)); } }
+                        clicked => { State.action(root.speed ? "rate-down" : "volume-down", ""); }
                     }
                     Label {
                         text: root.speed ? round(State.rate * 100) / 100 + "×" : round(State.volume * 100) + "%";
@@ -53,7 +53,7 @@ export component PlaybackSheet inherits Rectangle {
                         text: "+"; min-width: 52px;
                         accessible-label: root.speed ? Theme.t("Быстрее", "Faster") : Theme.t("Громче", "Raise volume");
                         enabled: root.speed ? State.rate < 3 : State.volume < 1;
-                        clicked => { if (root.speed) { State.action("rate-up", ""); } else { State.set-volume(min(1, State.volume + 0.05)); } }
+                        clicked => { State.action(root.speed ? "rate-up" : "volume-up", ""); }
                     }
                 }
                 VerticalLayout { spacing: 0px;

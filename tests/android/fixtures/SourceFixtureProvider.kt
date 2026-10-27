@@ -40,7 +40,9 @@ class SourceFixtureProvider : DocumentsProvider() {
                             else -> id
                         }
                         Document.COLUMN_MIME_TYPE -> if (id in listOf("root", "duplicates", "slow")) Document.MIME_TYPE_DIR else "audio/wav"
-                        Document.COLUMN_FLAGS -> 0
+                        Document.COLUMN_FLAGS -> if (id.startsWith("delete-")) Document.FLAG_SUPPORTS_DELETE else 0
+                        Document.COLUMN_SIZE -> if (id.startsWith("delete-")) 16044L else null
+                        Document.COLUMN_LAST_MODIFIED -> if (id.startsWith("delete-")) 1234000L else null
                         else -> null
                     }
                 })
@@ -49,6 +51,7 @@ class SourceFixtureProvider : DocumentsProvider() {
     }
 
     override fun queryDocument(id: String, projection: Array<out String>?): Cursor {
+        if (id.startsWith("delete-") && File(app.cacheDir, "$id.deleted").exists()) return MatrixCursor(projection ?: defaultColumns)
         if (id.startsWith("s4:")) return fixtureRows(projection, id)
         if (id == "denied") throw SecurityException("Test access revoked")
         return rows(projection, id)
@@ -74,6 +77,12 @@ class SourceFixtureProvider : DocumentsProvider() {
     }
 
     override fun isChildDocument(parent: String, child: String) = true
+
+    override fun deleteDocument(id: String) {
+        if (id == "delete-error") throw FileNotFoundException("Test provider rejected deletion")
+        if (id != "delete-audio") throw SecurityException("Immutable test document")
+        File(app.cacheDir, "$id.deleted").writeText("deleted")
+    }
 
     override fun openDocument(id: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
         if (id == "denied") throw SecurityException("Test access revoked")

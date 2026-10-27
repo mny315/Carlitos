@@ -94,6 +94,32 @@ fn rescan_refreshes_file_characteristics_without_replacing_parts() -> Result<()>
 }
 
 #[test]
+fn subsecond_changes_invalidate_cached_chapters_and_background_tag_results() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let mut store = Store::open(&temp.path().join("db"))?;
+    let mut imported = draft("changed", 1);
+    imported.files[0].modified_subsec_nanos = Some(100);
+    imported.files[0].chapters.push(Chapter {
+        title: "Old chapter".into(),
+        start: 0,
+        end: Some(60_000),
+    });
+    let before = store.import(vec![imported.clone()])?;
+    imported.files[0].modified_subsec_nanos = Some(200);
+    imported.files[0].chapters.clear();
+    let after = store.import(vec![imported])?;
+    assert!(after.media[0].chapters.is_empty());
+    let tags = BookTags {
+        year: Some(2002),
+        genre: "New genre".into(),
+    };
+    assert!(!store.update_sort_tags(&before.media[0], &tags)?);
+    assert!(store.update_sort_tags(&after.media[0], &tags)?);
+    assert_eq!(store.load()?.media[0].year, Some(2002));
+    Ok(())
+}
+
+#[test]
 fn custom_cover_and_tag_backfill_preserve_book_edits_and_progress() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let path = temp.path().join("db");

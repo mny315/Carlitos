@@ -4,6 +4,20 @@ use anyhow::{Context, Result, bail};
 use rusqlite::params;
 use std::path::Path;
 
+#[cfg(any(target_os = "android", test))]
+pub(super) fn update_document_location(conn: &rusqlite::Connection, file: &Media) -> Result<()> {
+    // Provider validation runs outside the transaction. The controller can
+    // finish reading tags meanwhile; retain that current JSON instead of
+    // replacing it with the relocation worker's earlier Media snapshot.
+    // Store::load takes location/size/mtime from these authoritative columns.
+    conn.execute(
+        "UPDATE media_files SET uri=?1,identity=?2,size=?3,modified=?4,source_id=?6,relative=?7 WHERE id=?5",
+        params![file.uri, file.identity, super::stored_size(file.size)?, file.modified.unwrap_or(-1),
+            file.id, file.source_id, file.relative],
+    )?;
+    Ok(())
+}
+
 impl Store {
     pub fn ensure_folder(&mut self, uri: &str) -> Result<Id> {
         ensure_folder(&self.conn, uri)
@@ -81,9 +95,15 @@ impl Store {
                 Ok((r.get::<_, Id>(0)?, r.get::<_, String>(1)?))
             })? {
                 let (file, relative) = link?;
-                // Check before joining: an absolute child would discard its prefix.
+                // Windows drive-relative (C:...) and rooted (\...) paths
+                // can also discard a joined prefix without being absolute.
                 let relative = Path::new(&relative);
-                if relative.is_absolute() {
+                if relative.components().any(|c| {
+                    !matches!(
+                        c,
+                        std::path::Component::Normal(_) | std::path::Component::CurDir
+                    )
+                }) {
                     bail!(crate::i18n::tr("Недопустимый относительный путь"));
                 }
                 links.insert((file, relative_root.join(relative)));
@@ -95,11 +115,12 @@ impl Store {
                 .media(file_id)
                 .context(crate::i18n::tr("Файл не найден в библиотеке"))?;
             let relative = relative.as_path();
-            if relative.is_absolute()
-                || relative
-                    .components()
-                    .any(|c| matches!(c, std::path::Component::ParentDir))
-            {
+            if relative.components().any(|c| {
+                !matches!(
+                    c,
+                    std::path::Component::Normal(_) | std::path::Component::CurDir
+                )
+            }) {
                 bail!(crate::i18n::tr("Недопустимый относительный путь"));
             }
             let path = new_root.join(relative);
@@ -108,6 +129,15 @@ impl Store {
             anyhow::ensure!(
                 metadata.is_file(),
                 crate::i18n::tr("не обычный файл (ссылки не импортируются)")
+            );
+            // A regular leaf can still sit below a symlink or junction that
+            // redirects an intermediate directory outside the selected root.
+            anyhow::ensure!(
+                dunce::canonicalize(&path)?.starts_with(&new_root),
+                tformat!(
+                    "Путь выходит за пределы выбранной папки: {}",
+                    relative.display()
+                )
             );
             if Some(metadata.len()) != file.size {
                 bail!(tformat!(
@@ -124,6 +154,7 @@ impl Store {
                 uri,
                 crate::import::identity(&path)?,
                 crate::platform::modified(&metadata),
+                crate::platform::modified_subsec_nanos(&metadata),
             );
             let canonical = local_path(&file.uri).is_some_and(|old| old == old_root.join(relative));
             if canonical {
@@ -139,7 +170,7 @@ impl Store {
         for (id, uri) in sources {
             tx.execute("UPDATE sources SET uri=?1 WHERE id=?2", params![uri, id])?;
         }
-        for (id, (uri, identity, modified)) in updates {
+        for (id, (uri, identity, modified, modified_subsec_nanos)) in updates {
             // Links from an unchanged parent otherwise keep pointing at the
             // old child folder and make the next parent relocation fail.
             let links: Vec<(Id, String, String)> = tx.prepare(
@@ -184,8 +215,17 @@ impl Store {
                 })
                 .context("Relocated file has no matching source path")?;
             tx.execute(
-                "UPDATE media_files SET uri=?1,identity=?2,modified=?3,source_id=?5,relative=?6 WHERE id=?4",
-                params![uri, identity, modified, id, owner, relative],
+                "UPDATE media_files SET uri=?1,identity=?2,modified=?3,source_id=?5,relative=?6,
+                 data=json_set(data,'$.modified_subsec_nanos',?7) WHERE id=?4",
+                params![
+                    uri,
+                    identity,
+                    modified,
+                    id,
+                    owner,
+                    relative,
+                    modified_subsec_nanos
+                ],
             )?;
         }
         tx.commit()?;
@@ -216,6 +256,27 @@ pub(super) fn ensure_folder(conn: &rusqlite::Connection, uri: &str) -> Result<Id
         [uri],
         |row| row.get(0),
     )?)
+}
+
+/// A book import creates its own source in addition to any selected collection
+/// folder. Once its last book is removed it must not turn into an empty folder.
+pub(super) fn remove_empty_book_sources(tx: &rusqlite::Transaction<'_>) -> Result<()> {
+    let ids: Vec<Id> = tx.prepare(
+        "SELECT s.id FROM sources s WHERE s.kind='book'
+         AND NOT EXISTS(SELECT 1 FROM books WHERE source_id=s.id)
+         AND NOT EXISTS(SELECT 1 FROM source_files sf JOIN book_parts p ON p.file_id=sf.file_id WHERE sf.source_id=s.id)
+         AND NOT EXISTS(SELECT 1 FROM media_files m JOIN book_parts p ON p.file_id=m.id WHERE m.source_id=s.id)",
+    )?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+    // Remove the whole obsolete group from the candidates before repairing
+    // file ownership. Another empty source may use a different URI scheme
+    // and is not a surviving grant through which a file should be rebound.
+    for id in &ids {
+        tx.execute("DELETE FROM source_files WHERE source_id=?1", [id])?;
+    }
+    for id in ids {
+        remove_source_records(tx, id)?;
+    }
+    Ok(())
 }
 
 fn remove_source_records(tx: &rusqlite::Transaction<'_>, id: Id) -> Result<()> {

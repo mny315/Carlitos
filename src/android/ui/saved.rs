@@ -15,8 +15,8 @@ struct SavedUi {
     picker_owner: String,
     editor: Option<app::view::SavedEditor>,
     source: Option<SavedSource>,
-    source_selection: bool,
-    selected_sources: Vec<String>,
+    source_selection: Option<std::collections::BTreeSet<crate::library::Id>>,
+    book_selection: Option<app::view::SavedBookSelection>,
     expanded_sources: Vec<String>,
     exact_time: String,
     import_path: String,
@@ -26,6 +26,7 @@ struct SavedUi {
     import_file: bool,
     single_book: bool,
     selected_draft: i32,
+    draft_generation: String,
 }
 struct SavedSource {
     key: String,
@@ -52,13 +53,10 @@ pub(super) fn save(ui: &app::Ui) {
             path: s.get_relocate_path().into(),
             error: s.get_source_error().into(),
         }),
-        source_selection: s.get_source_selection(),
-        selected_sources: s
-            .get_sources()
-            .iter()
-            .filter(|row| row.selected)
-            .map(|row| row.key.to_string())
-            .collect(),
+        source_selection: (s.get_page() == 4 && s.get_source_selection())
+            .then(|| ui.view.borrow().save_source_selection()),
+        book_selection: (s.get_page() == 0 && s.get_book_selection())
+            .then(|| ui.view.borrow().save_book_selection()),
         exact_time: s.get_exact_time().into(),
         expanded_sources: s
             .get_sources()
@@ -73,6 +71,7 @@ pub(super) fn save(ui: &app::Ui) {
         import_file: s.get_import_file(),
         single_book: s.get_single_book(),
         selected_draft: s.get_selected_draft(),
+        draft_generation: s.get_draft_generation().into(),
     });
 }
 
@@ -126,11 +125,23 @@ pub fn restore() {
             },
         );
         s.set_reorder(saved.reorder);
-        if saved.page == 4 && saved.source_selection {
-            s.invoke_action("select-sources".into(), "".into());
-            for key in saved.selected_sources {
-                s.invoke_action("select-source".into(), key.into());
-            }
+        if saved.page == 0
+            && let Some(selection) = saved.book_selection
+        {
+            super::VIEW.with_borrow(|weak| {
+                if let Some(view) = weak.upgrade() {
+                    view.borrow_mut().restore_book_selection(selection);
+                }
+            });
+        }
+        if saved.page == 4
+            && let Some(selection) = saved.source_selection
+        {
+            super::VIEW.with_borrow(|weak| {
+                if let Some(view) = weak.upgrade() {
+                    view.borrow_mut().restore_source_selection(selection);
+                }
+            });
         }
         s.set_books_scroll_y(saved.scroll);
         for key in saved.expanded_sources {
@@ -143,8 +154,9 @@ pub fn restore() {
         s.set_import_expanded(saved.import_expanded);
         s.set_import_file(saved.import_file);
         s.set_single_book(saved.single_book);
-        let draft_exists = usize::try_from(saved.selected_draft)
-            .is_ok_and(|index| index < s.get_drafts().row_count());
+        let draft_exists = s.get_draft_generation().as_str() == saved.draft_generation
+            && usize::try_from(saved.selected_draft)
+                .is_ok_and(|index| index < s.get_drafts().row_count());
         s.set_selected_draft(if draft_exists {
             saved.selected_draft
         } else {

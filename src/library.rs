@@ -24,6 +24,9 @@ pub struct Media {
     pub identity: String,
     pub size: Option<u64>,
     pub modified: Option<i64>,
+    /// Fractional seconds of a local filesystem timestamp, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified_subsec_nanos: Option<u32>,
     pub duration: Option<Millis>,
     pub title: String,
     pub artist: String,

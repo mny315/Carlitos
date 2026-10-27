@@ -39,6 +39,17 @@ pub fn modified(metadata: &Metadata) -> i64 {
         .map_or(0, |d| d.as_secs().min(i64::MAX as u64) as i64)
 }
 
+pub(crate) fn modified_subsec_nanos(metadata: &Metadata) -> Option<u32> {
+    Some(
+        metadata
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .subsec_nanos(),
+    )
+}
+
 #[cfg(unix)]
 pub fn identity(path: &Path) -> anyhow::Result<String> {
     use std::os::unix::fs::MetadataExt;
@@ -46,14 +57,25 @@ pub fn identity(path: &Path) -> anyhow::Result<String> {
     Ok(format!("{}:{}", meta.dev(), meta.ino()))
 }
 
+#[cfg(unix)]
+pub(crate) fn file_identity(file: &std::fs::File) -> anyhow::Result<String> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = file.metadata()?;
+    Ok(format!("{}:{}", meta.dev(), meta.ino()))
+}
+
 #[cfg(windows)]
 pub fn identity(path: &Path) -> anyhow::Result<String> {
+    file_identity(&std::fs::File::open(path)?)
+}
+
+#[cfg(windows)]
+pub(crate) fn file_identity(file: &std::fs::File) -> anyhow::Result<String> {
     use std::os::windows::io::AsRawHandle;
     use windows::Win32::{
         Foundation::HANDLE,
         Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle},
     };
-    let file = std::fs::File::open(path)?;
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     unsafe {
         GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info)?;

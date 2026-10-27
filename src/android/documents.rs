@@ -43,6 +43,16 @@ pub(crate) fn stat(uri: &str) -> Result<Document> {
         json!({"op":"stat", "uri":uri}),
     )?)?)
 }
+pub(crate) fn check_deletion(uri: &str, original: &Media) -> Result<()> {
+    super::bridge::documents(json!({"op":"check-delete", "uri":uri,
+        "expected":{"size":original.size,"modified":original.modified}}))?;
+    Ok(())
+}
+pub(crate) fn delete(uri: &str, original: &Media) -> Result<()> {
+    super::bridge::documents(json!({"op":"delete", "uri":uri,
+        "expected":{"size":original.size,"modified":original.modified}}))?;
+    Ok(())
+}
 pub(crate) fn children(uri: &str) -> Result<Vec<Document>> {
     Ok(serde_json::from_value(super::bridge::documents(
         json!({"op":"children", "uri":uri}),

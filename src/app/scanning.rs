@@ -38,7 +38,7 @@ impl Controller {
         ));
         let control = self.scan_control.clone();
         let tx = self.tx.clone();
-        self.scans.retain(|thread| !thread.is_finished());
+        self.reap_workers();
         let worker = std::thread::Builder::new()
             .name("carlitos-import".into())
             .spawn(move || {
@@ -72,6 +72,7 @@ impl Controller {
         let database = self.options.database.clone();
         let tx = self.tx.clone();
         let control = self.maintenance_control.clone();
+        self.reap_workers();
         let worker = std::thread::Builder::new()
             .name("carlitos-relocate".into())
             .spawn(move || {
@@ -92,7 +93,15 @@ impl Controller {
     }
     pub(super) fn relocated(&mut self, id: Id, result: Result<()>) -> Result<()> {
         self.maintenance = false;
-        let _ = self.events.try_send(Event::SourceUpdating(false));
+        let result = self.finish_relocation(id, result);
+        // A successful relocation continues with a source refresh. Keep its
+        // controls busy across both operations, and release them on every error.
+        if self.scan_source.is_none() {
+            let _ = self.events.try_send(Event::SourceUpdating(false));
+        }
+        result
+    }
+    fn finish_relocation(&mut self, id: Id, result: Result<()>) -> Result<()> {
         if result.is_err()
             && (self.quitting
                 || self
@@ -117,35 +126,41 @@ impl Controller {
         Ok(())
     }
     pub(super) fn scan_done(&mut self, generation: u64, result: Result<ScanResult>) -> Result<()> {
-        if generation == self.scan_generation {
-            let _ = self.events.try_send(Event::Scanning(false, String::new()));
-            let source = self.scan_source.take();
-            if source.is_some() {
-                let _ = self.events.try_send(Event::SourceUpdating(false));
+        if generation != self.scan_generation {
+            return Ok(());
+        }
+        let source = self.scan_source.take();
+        let result = self.finish_scan(source, result);
+        let _ = self.events.try_send(Event::Scanning(false, String::new()));
+        if source.is_some() {
+            // Publish completion before enabling the folder's editor. Otherwise
+            // a late acknowledgement can close an editor opened during the merge.
+            let _ = self.events.try_send(Event::SourceUpdating(false));
+        }
+        result
+    }
+    fn finish_scan(&mut self, source: Option<Id>, result: Result<ScanResult>) -> Result<()> {
+        if self.quitting
+            || self
+                .scan_control
+                .cancelled
+                .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        let result = result?;
+        if let Some(source) = source {
+            let drafts = preserve_source_books(&self.library, result.drafts)?;
+            self.save()?;
+            let library = self.store()?.import_folders(drafts, result.folders)?;
+            self.reconcile(library);
+            let mut message = text("Источник обновлён", "Source updated").to_string();
+            if !result.issues.is_empty() {
+                message.push('\n');
+                message.push_str(&result.issues.join("\n"));
             }
-            if self.quitting
-                || self
-                    .scan_control
-                    .cancelled
-                    .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                return Ok(());
-            }
-            if let Some(source) = source {
-                let result = result?;
-                let drafts = preserve_source_books(&self.library, result.drafts)?;
-                self.save()?;
-                let library = self.store()?.import_folders(drafts, result.folders)?;
-                self.reconcile(library);
-                let mut message = text("Источник обновлён", "Source updated").to_string();
-                if !result.issues.is_empty() {
-                    message.push('\n');
-                    message.push_str(&result.issues.join("\n"));
-                }
-                let _ = self.events.try_send(Event::SourceUpdated(source, message));
-                return Ok(());
-            }
-            let result = result?;
+            let _ = self.events.try_send(Event::SourceUpdated(source, message));
+        } else {
             self.drafts = result.drafts;
             self.import_folders = result.folders;
             self.issues = result.issues;
@@ -153,7 +168,7 @@ impl Controller {
         }
         Ok(())
     }
-    pub(super) fn import(&mut self) -> Result<()> {
+    pub(super) fn import(&mut self, owner: String) -> Result<()> {
         let drafts: Vec<_> = self
             .drafts
             .iter()
@@ -184,7 +199,9 @@ impl Controller {
             )
             .into(),
         );
-        let _ = self.events.try_send(Event::Imported);
+        let _ = self
+            .events
+            .try_send(Event::Imported(self.scan_generation, owner));
         Ok(())
     }
 }

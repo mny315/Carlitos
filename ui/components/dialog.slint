@@ -1,7 +1,7 @@
 import { State } from "../state.slint";
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Action, Label, Field, Cover, SeekBar } from "controls.slint";
+import { Action, Label, Field, Cover, SeekBar, Toggle } from "controls.slint";
 import { Transport, MobileTimeline, MobileVolumeAction, MobileRateAction } from "player.slint";
 import { PlaybackSheet } from "playback-sheet.slint";
 import { TimeSheet } from "time-sheet.slint";
@@ -16,9 +16,10 @@ export component AppDialog inherits Rectangle {
     private property <bool> navigation-menu: dialog-kind == 12;
     private property <bool> popup-menu: sort-menu || navigation-menu;
     private property <bool> playback-sheet: State.android && (dialog-kind == 3 || dialog-kind == 6 || dialog-kind == 7);
+    private property <bool> removal-sheet: State.android && dialog-kind == 1;
     function dismiss() { State.overlay = 0; }
     function dismiss-outside() {
-        if (root.requested-kind != 0 && (root.popup-menu || root.playback-sheet || root.dialog-kind == 3)) { Theme.haptic("button"); root.dismiss(); }
+        if (root.requested-kind != 0 && (root.popup-menu || root.playback-sheet || root.dialog-kind == 3 || root.removal-sheet)) { Theme.haptic("button"); root.dismiss(); }
     }
     // Keep the closing dialog's content until its fade has finished.
     changed requested-kind => {
@@ -70,12 +71,12 @@ export component AppDialog inherits Rectangle {
     }
     if !root.playback-sheet: Rectangle {
         x: root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-x - self.width : State.sort-menu-x) - root.left-inset, 8px, parent.width - self.width - 8px) : (parent.width - self.width) / 2;
-        y: root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-y : State.sort-menu-y) - root.top-inset + 4px, 8px, parent.height - self.height - 8px) : (parent.height - self.height) / 2 + (1 - root.opacity) * 12px;
-        width: root.popup-menu ? min(parent.width - 16px, 240px * Theme.font-scale) : min(parent.width - (State.android ? 32px : 24px), State.android ? 400px : 460px);
-        height: min(parent.height - 24px, dialog.preferred-height);
-        background: Theme.surface; border-radius: root.popup-menu ? 12px : State.android ? 20px : 12px; border-width: 1px; border-color: Theme.line;
+        y: root.removal-sheet ? parent.height - self.height + (1 - root.opacity) * (self.height + root.bottom-inset) : root.popup-menu ? clamp((root.navigation-menu ? State.navigation-menu-y : State.sort-menu-y) - root.top-inset + 4px, 8px, parent.height - self.height - 8px) : (parent.height - self.height) / 2 + (1 - root.opacity) * 12px;
+        width: root.removal-sheet ? min(parent.width - 24px, 480px) : root.popup-menu ? min(parent.width - 16px, 240px * Theme.font-scale) : min(parent.width - (State.android ? 32px : 24px), State.android ? 400px : 460px);
+        height: min(parent.height - (root.removal-sheet ? 12px : 24px), dialog.preferred-height);
+        background: Theme.surface; border-radius: root.removal-sheet ? 16px : root.popup-menu ? 12px : State.android ? 20px : 12px; border-width: 1px; border-color: Theme.line;
         TouchArea { }
-        ScrollView { dialog := VerticalLayout { padding: root.popup-menu ? 8px : 20px; spacing: root.popup-menu ? 0px : 16px;
+        ScrollView { dialog := VerticalLayout { padding: root.popup-menu ? 8px : root.removal-sheet ? 12px : 20px; spacing: root.popup-menu ? 0px : 16px;
             if !root.popup-menu: Label { text: root.dialog-kind == 1 ? Theme.t("Удалить из библиотеки?", "Remove from library?") : root.dialog-kind == 2 ? Theme.t("Редактировать книгу", "Edit book") : root.dialog-kind == 3 ? Theme.t("Перейти ко времени", "Go to time") : root.dialog-kind == 5 ? Theme.t("Обновить источник", "Update source") : root.dialog-kind == 6 ? Theme.t("Скорость воспроизведения", "Playback speed") : root.dialog-kind == 7 ? Theme.t("Громкость", "Volume") : root.dialog-kind == 9 ? Theme.t("Сортировка", "Sort by") : root.dialog-kind == 10 ? Theme.t("Оформление", "Appearance") : root.dialog-kind == 11 ? Theme.t("Язык", "Language") : root.dialog-kind == 8 ? Theme.t("Воспроизведение", "Playback") : Theme.t("Трей недоступен", "Tray unavailable"); font-size: (22px) * Theme.font-scale; font-weight: 600; wrap: word-wrap; horizontal-alignment: root.dialog-kind == 6 ? center : left; }
             if root.navigation-menu: VerticalLayout { spacing: 4px;
                 Action { text: Theme.t("Библиотека", "Library"); icon: @image-url("../icons/book.svg"); fill: true; quiet: true; selected: State.page == 0 || State.page == 1; clicked => { State.navigate(0); root.dismiss(); } }
@@ -99,9 +100,9 @@ export component AppDialog inherits Rectangle {
                 Label { text: round(State.volume * 100) + "%"; horizontal-alignment: center; font-size: (26px) * Theme.font-scale; }
                 SeekBar { value <=> State.volume; step: 0.05; label: Theme.t("Громкость", "Volume"); changed(v) => { State.set-volume(v); } }
                 HorizontalLayout { spacing: 12px;
-                    Action { text: "−"; accessible-label: Theme.t("Тише", "Lower volume"); clicked => { State.set-volume(max(0, State.volume - 0.05)); } }
+                    Action { text: "−"; accessible-label: Theme.t("Тише", "Lower volume"); clicked => { State.action("volume-down", ""); } }
                     Action { fill: true; centered: true; icon: State.muted ? @image-url("../icons/muted.svg") : @image-url("../icons/volume.svg"); text: State.muted ? Theme.t("Включить звук", "Unmute") : Theme.t("Без звука", "Mute"); selected: State.muted; clicked => { State.action("mute", ""); } }
-                    Action { text: "+"; accessible-label: Theme.t("Громче", "Raise volume"); clicked => { State.set-volume(min(1, State.volume + 0.05)); } }
+                    Action { text: "+"; accessible-label: Theme.t("Громче", "Raise volume"); clicked => { State.action("volume-up", ""); } }
                 }
             }
             if root.dialog-kind == 8: VerticalLayout { spacing: 12px;
@@ -130,7 +131,13 @@ export component AppDialog inherits Rectangle {
                 if !State.android: Label { text: Theme.t("От 0,5× до 3× · шаг 0,05×", "0.5× to 3× · step 0.05×"); color: Theme.muted; wrap: word-wrap; horizontal-alignment: center; }
             }
             if root.dialog-kind == 1 && State.remove-kind == "sources": Label { text: Theme.t("Источников выбрано: ", "Selected sources: ") + State.remove-source-count; font-weight: 600; wrap: word-wrap; }
-            if root.dialog-kind == 1: Label { text: State.remove-kind == "sources" ? Theme.t("Выбранные источники и их книги будут удалены из библиотеки вместе с прогрессом. Исходные аудиофайлы останутся на месте.", "Selected sources and their books will be removed from the library along with listening progress. Original audio files will stay untouched.") : Theme.t("Исходные аудиофайлы останутся на месте. Прогресс этой записи будет удалён.", "Original audio files will stay untouched. Progress for this entry will be removed."); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 1 && State.remove-kind == "books": Label { text: Theme.t("Книг выбрано: ", "Selected books: ") + State.remove-book-count; font-weight: 600; wrap: word-wrap; }
+            if root.dialog-kind == 1: Label { text: State.remove-kind == "books" ? Theme.t("Выбранные книги и их прогресс будут удалены из библиотеки.", "Selected books and their listening progress will be removed from the library.") : State.remove-kind == "sources" ? Theme.t("Выбранные источники и их книги будут удалены из библиотеки вместе с прогрессом. Исходные аудиофайлы останутся на месте.", "Selected sources and their books will be removed from the library along with listening progress. Original audio files will stay untouched.") : Theme.t("Исходные аудиофайлы останутся на месте. Прогресс этой записи будет удалён.", "Original audio files will stay untouched. Progress for this entry will be removed."); wrap: word-wrap; color: Theme.muted; }
+            if root.dialog-kind == 1 && State.remove-kind == "books": Toggle {
+                text: Theme.t("Удалить файлы книг", "Delete book files");
+                description: State.remove-book-files ? Theme.t("Аудиофайлы будут удалены с устройства без возможности отмены.", "Audio files will be permanently deleted from the device.") : Theme.t("Без галочки аудиофайлы останутся на устройстве.", "Leave unchecked to keep audio files on the device.");
+                checked <=> State.remove-book-files;
+            }
             if root.dialog-kind == 2: Field { text <=> State.edit-title; placeholder: Theme.t("Название", "Title"); }
             if root.dialog-kind == 2: Field { text <=> State.edit-author; placeholder: Theme.t("Автор", "Author"); }
             if root.dialog-kind == 2 && State.android: HorizontalLayout { alignment: center;
@@ -161,12 +168,13 @@ export component AppDialog inherits Rectangle {
                 clicked => { State.remove-key = State.relocate-key; State.remove-kind = "source"; State.overlay = 1; }
             }
             if root.dialog-kind == 4: Label { text: Theme.t("Сейчас нет панели, из которой можно вернуть окно.", "There is no tray host to bring the window back."); wrap: word-wrap; color: Theme.muted; }
-            if !root.popup-menu: HorizontalLayout { spacing: 8px; alignment: root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6) ? stretch : end;
+            if !root.popup-menu: HorizontalLayout { spacing: 8px; padding-bottom: State.android && !root.removal-sheet ? 8px : 0px; alignment: root.removal-sheet || root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6) ? stretch : end;
                 // Android keeps preedit outside edit-title until Action takes
                 // focus. Allow Done to commit it; the controller validates the
                 // resulting title before saving.
-                if root.dialog-kind < 6: Action { text: root.dialog-kind == 4 ? Theme.t("Оставить", "Keep open") : root.dialog-kind == 5 && State.source-busy ? Theme.t("Закрыть", "Close") : Theme.t("Отмена", "Cancel"); clicked => { State.overlay = 0; } }
-                Action { fill: root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6); centered: true; text: root.dialog-kind == 1 ? Theme.t("Удалить", "Remove") : root.dialog-kind == 4 ? Theme.t("Выйти", "Quit") : root.dialog-kind == 5 ? (State.source-busy ? Theme.t("Обновляем…", "Updating…") : Theme.t("Обновить", "Update")) : Theme.t("Готово", "Done"); primary: true; enabled: (root.dialog-kind != 2 || (!State.cover-loading && (State.android || State.edit-title != ""))) && (root.dialog-kind != 5 || (!State.source-busy && State.relocate-path != "")); clicked => {
+                if root.dialog-kind < 6 && !root.removal-sheet: Rectangle { horizontal-stretch: 1; }
+                if root.dialog-kind < 6: Action { fill: root.removal-sheet; centered: true; text: root.dialog-kind == 4 ? Theme.t("Оставить", "Keep open") : root.dialog-kind == 5 && State.source-busy ? Theme.t("Закрыть", "Close") : Theme.t("Отмена", "Cancel"); clicked => { State.overlay = 0; } }
+                Action { fill: root.removal-sheet || root.dialog-kind == 6 || (State.android && root.dialog-kind >= 6); centered: true; text: root.dialog-kind == 1 ? Theme.t("Удалить", "Remove") : root.dialog-kind == 4 ? Theme.t("Выйти", "Quit") : root.dialog-kind == 5 ? (State.source-busy ? Theme.t("Обновляем…", "Updating…") : Theme.t("Обновить", "Update")) : Theme.t("Готово", "Done"); primary: true; enabled: (root.dialog-kind != 2 || (!State.cover-loading && (State.android || State.edit-title != ""))) && (root.dialog-kind != 5 || (!State.source-busy && State.relocate-path != "")); clicked => {
                     if (root.dialog-kind == 1) { State.action("remove-" + State.remove-kind, State.remove-key); State.overlay = 0; }
                     else if (root.dialog-kind == 2) { State.action("edit", ""); }
                     else if (root.dialog-kind == 3) { State.action("exact-time", State.exact-time); }

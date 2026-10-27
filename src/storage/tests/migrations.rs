@@ -70,7 +70,7 @@ fn concurrent_opens_initialize_and_migrate_legacy_schemas_once() -> Result<()> {
                             store
                                 .conn
                                 .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?,
-                            7
+                            8
                         );
                         Ok(())
                     })
@@ -172,7 +172,7 @@ fn migration_removes_music_session_but_preserves_shared_books() -> Result<()> {
             store
                 .conn
                 .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
-            7
+            8
         );
         assert!(store.conn.prepare("SELECT * FROM queue_entries").is_err());
         assert!(store.conn.prepare("SELECT music FROM media_files").is_err());

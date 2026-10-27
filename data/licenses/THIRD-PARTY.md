@@ -29,7 +29,9 @@ On Windows, decoding and audio output use the operating system's Media Foundatio
 and XAudio2. Opus decoding is built in using libopus (BSD-3-Clause, through
 opusic-sys 0.7.5) and Symphonia 0.5.5 (MPL-2.0) for the Ogg container.
 Their complete licenses are in OPUS-LICENSE.txt and SYMPHONIA-LICENSE.txt.
-The unmodified Symphonia sources are available at
+The Ogg parser includes a local fix to the Opus packet frame count. Its complete
+modified source, license and patch notes are in vendor/symphonia-format-ogg.
+The remaining unmodified Symphonia sources are available at
 https://github.com/pdeljanov/Symphonia/tree/v0.5.5 and https://crates.io/crates/symphonia/0.5.5.
 GStreamer, GLib, D-Bus, PulseAudio and ALSA are not included.
 Sonic by Bill Cox is compiled into the Windows executable under Apache-2.0.

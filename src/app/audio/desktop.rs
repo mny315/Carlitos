@@ -101,6 +101,10 @@ impl Audio {
                                 player.stop();
                                 Ok(())
                             }
+                            Input::Command(Ok(AudioCommand::Barrier(reply))) => {
+                                let _ = reply.send(());
+                                Ok(())
+                            }
                             Input::Command(Ok(AudioCommand::Snapshot)) => {
                                 pending_barrier = Some(std::time::Instant::now());
                                 player.poll();
@@ -182,6 +186,7 @@ impl Audio {
                             ended: player.ended,
                             barrier,
                             error,
+                            preserve_progress: false,
                         };
                         if app.send(Command::Playback(snapshot)).is_err() {
                             break;

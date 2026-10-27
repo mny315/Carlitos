@@ -22,6 +22,9 @@ impl View {
         state.on_search(move |q, f| {
             if let Some(v) = weak.upgrade() {
                 let mut v = v.borrow_mut();
+                if v.query != q.to_lowercase() || v.filter != f {
+                    v.action("clear-book-selection", "");
+                }
                 v.query = q.to_lowercase();
                 v.filter = f;
                 let tab = match f {
@@ -76,9 +79,14 @@ impl View {
             }
         });
         let tx = view.borrow().tx.clone();
+        let weak = window.as_weak();
         state.on_draft_changed(move |index, title, author, included| {
-            if index >= 0 {
+            if index >= 0
+                && let Some(window) = weak.upgrade()
+                && let Ok(generation) = window.global::<State>().get_draft_generation().parse()
+            {
                 let _ = tx.send(Command::DraftEdit(
+                    generation,
                     index as usize,
                     title.into(),
                     author.into(),
@@ -102,6 +110,10 @@ impl View {
                         .and_then(|draft| draft.files.get(index as usize))
                 {
                     view.send(Command::DraftFile(
+                        w.global::<State>()
+                            .get_draft_generation()
+                            .parse()
+                            .unwrap_or(0),
                         draft as usize,
                         file.uri.clone(),
                         action.into(),
@@ -120,6 +132,9 @@ impl View {
             "skip-silence" => Some(Command::SkipSilence(state.get_skip_silence())),
             "open-book" => {
                 if let Some(id) = id.filter(|id| self.library.books.iter().any(|b| b.id == *id)) {
+                    if state.get_book_selection() {
+                        self.book_selection_action("clear-book-selection", "");
+                    }
                     self.selected = Some(id);
                     state.set_page(1);
                     // A tapped library row is about to become hidden. Keep
@@ -150,7 +165,8 @@ impl View {
             }
             #[cfg(target_os = "android")]
             "pick-file" => {
-                crate::android::bridge::dispatch(serde_json::json!({"op":"pick", "kind":"file"}))
+                let owner = super::renew_picker_owner(&w);
+                crate::android::bridge::dispatch(serde_json::json!({"op":"pick", "kind":"file", "owner":owner.as_str()}))
                     .err()
                     .map(|e| Command::Error(format!("{e:#}")))
             }
@@ -174,6 +190,8 @@ impl View {
             "back" => Some(Command::SeekDelta(-i64::from(state.get_seek_step()) * 1000)),
             "forward" => Some(Command::SeekDelta(i64::from(state.get_seek_step()) * 1000)),
             "mute" => Some(Command::Mute),
+            "volume-up" => Some(Command::VolumeStep(true)),
+            "volume-down" => Some(Command::VolumeStep(false)),
             "rate-up" => Some(Command::RateStep(true)),
             "rate-down" => Some(Command::RateStep(false)),
             "quit" => {
@@ -186,6 +204,14 @@ impl View {
             "complete" => id.map(Command::Complete),
             "reset-progress" => id.map(Command::ResetProgress),
             "remove-book" => id.map(Command::RemoveBook),
+            "select-book"
+            | "select-all-books"
+            | "deselect-books"
+            | "clear-book-selection"
+            | "complete-books"
+            | "reset-books-progress"
+            | "confirm-remove-books"
+            | "remove-books" => self.book_selection_action(action, arg),
             "remove-source" | "toggle-source" | "rescan" | "update-source" | "begin-source-edit" | "finish-source-transition" => self.folder_action(action, arg),
             "select-sources"
             | "select-source"
@@ -200,11 +226,14 @@ impl View {
             "edit" => state.get_edit_key().parse().ok().map(|id| {
                 Command::Edit(
                     id,
-                    state.get_edit_title().into(),
-                    state.get_edit_author().into(),
+                    crate::app::BookEdit {
+                        owner: state.get_picker_owner().into(),
+                        title: state.get_edit_title().into(),
+                        author: state.get_edit_author().into(),
+                        cover: (!state.get_edit_cover_path().is_empty())
+                            .then(|| state.get_edit_cover_path().to_string()),
+                    },
                     vec![],
-                    (!state.get_edit_cover_path().is_empty())
-                        .then(|| state.get_edit_cover_path().to_string()),
                 )
             }),
             "preview-cover" => Some(self.preview_cover(arg)),
@@ -230,16 +259,23 @@ impl View {
                 Some(Command::Exact(arg.into()))
             }
             "scan" => {
+                // Invalidate the old completion immediately, before the new
+                // scan's generation has reached this View from the controller.
+                super::renew_picker_owner(&w);
                 state.set_selected_draft(-1);
                 state.set_import_expanded(false);
                 Some(Command::Scan(Location::input(arg), state.get_single_book()))
             }
             "cancel-scan" => {
+                super::renew_picker_owner(&w);
                 state.set_selected_draft(-1);
                 state.set_import_expanded(false);
                 Some(Command::CancelScan)
             }
-            "import" => Some(Command::Import),
+            "import" => Some(Command::Import(
+                state.get_draft_generation().parse().unwrap_or(0),
+                state.get_picker_owner().into(),
+            )),
             "draft" => {
                 if let Ok(index) = usize::try_from(state.get_selected_draft())
                     && let Some(draft) = self.drafts.get(index)

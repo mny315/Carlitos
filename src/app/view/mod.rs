@@ -1,5 +1,6 @@
 mod actions;
 mod book_model;
+mod book_selection;
 mod books;
 mod covers;
 mod editor;
@@ -13,6 +14,8 @@ use super::{Command, audio::Playback};
 use crate::{AppWindow, PartItem, SourceItem, State};
 use crate::{library::*, settings::Settings, storage::Draft};
 use book_model::BookModel;
+#[cfg(target_os = "android")]
+pub(crate) use book_selection::SavedBookSelection;
 pub use covers::CoverResult;
 use covers::Covers;
 #[cfg(target_os = "android")]
@@ -40,11 +43,16 @@ pub struct View {
     source_transition_timer: slint::Timer,
     selected_sources: BTreeSet<Id>,
     pending_source_removal: Vec<Id>,
+    selected_books: BTreeSet<Id>,
+    book_selection_generation: u64,
+    pending_book_removal: Vec<Id>,
+    pending_book_removal_generation: u64,
     covers: Rc<Covers>,
     by_book: HashMap<Id, Vec<usize>>,
     by_media: HashMap<Id, usize>,
     by_part: HashMap<Id, usize>,
     book_tags: HashMap<Id, BookTags>,
+    sync_ready: BTreeSet<Id>,
     cover_request: u64,
     selected: Option<Id>,
     playback: Playback,
@@ -95,11 +103,16 @@ impl View {
             source_transition_timer: slint::Timer::default(),
             selected_sources: BTreeSet::new(),
             pending_source_removal: vec![],
+            selected_books: BTreeSet::new(),
+            book_selection_generation: book_selection::next_generation(),
+            pending_book_removal: vec![],
+            pending_book_removal_generation: 0,
             covers,
             by_book: HashMap::new(),
             by_media: HashMap::new(),
             by_part: HashMap::new(),
             book_tags: HashMap::new(),
+            sync_ready: BTreeSet::new(),
             cover_request: 0,
             selected: None,
             playback: Playback::default(),

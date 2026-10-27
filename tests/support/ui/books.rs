@@ -95,8 +95,19 @@ pub async fn playback_checks(window: &AppWindow, view: &Rc<RefCell<app::view::Vi
     wait(750).await;
     let paused = first_row(window);
     wait(150).await;
+    let settled = first_row(window);
+    if paused != settled || state.get_books().row_data(0).unwrap().key != "2" {
+        eprintln!(
+            "Paused row mismatch: pixels_equal={}, first={}, playing={}, backdrop={}, moving={}",
+            paused == settled,
+            state.get_books().row_data(0).unwrap().key,
+            state.get_playing(),
+            state.get_backdrop_running(),
+            state.get_books_moving()
+        );
+    }
     check(
-        paused == first_row(window) && state.get_books().row_data(0).unwrap().key == "2",
+        paused == settled && state.get_books().row_data(0).unwrap().key == "2",
         "pause stops the indicator and keeps the book first",
     );
     theme.set_reduced_motion(true);

@@ -71,11 +71,16 @@ fn request(request: Value) -> Result<Value> {
                         "scan-done" => view.event(Event::Scanning(false, String::new())),
                         "imported" => {
                             view.event(Event::Notice("Books added to your library".into()));
-                            view.event(Event::Imported);
+                            view.event(Event::Imported(
+                                s.get_draft_generation().parse().unwrap_or(0),
+                                s.get_picker_owner().into(),
+                            ));
                         }
                         "updated" => view.event(Event::SourceUpdated(0, "Source updated".into())),
                         "error" => view.event(Event::Notice("Test error".into())),
+                        "long-error" => view.event(Event::Notice("Could not prepare files for synchronization: 1. Audiobooks / A very long book title / Chapter 01.mp3: Permission denied. Check file access and start synchronization again.".into())),
                         "dismiss" => s.invoke_dismiss_notice(),
+                        "books-changed" => view.event(Event::BooksChanged(request["generation"].as_u64().context("Missing selection generation")?)),
                         kind => anyhow::bail!("Unknown feedback: {kind}"),
                     }
                     Ok(())
@@ -115,7 +120,7 @@ fn request(request: Value) -> Result<Value> {
             "keyboard":s.get_keyboard_visible(),"short":s.get_short_screen(),
             "selected":s.get_selected().key.as_str(),"parts":s.get_parts().row_count(),
             "part_rows":s.get_parts().iter().map(|p|json!({"key":p.key.as_str(),"title":p.title.as_str(),"active":p.active,"chapter":p.chapter})).collect::<Vec<_>>(),
-            "books":s.get_books().iter().map(|b|json!({"key":b.key.as_str(),"title":b.title.as_str()})).collect::<Vec<_>>(),
+            "books":s.get_books().iter().map(|b|json!({"key":b.key.as_str(),"title":b.title.as_str(),"selected":b.selected,"started":b.started,"completed":b.completed})).collect::<Vec<_>>(),
             "playing":s.get_playing(),"position":s.get_position(),"volume":s.get_volume(),"muted":s.get_muted(),"rate":s.get_rate(),
             "dark":t.get_dark(),"english":t.get_english(),"font_scale":t.get_font_scale(),
             "text_size_percent":s.get_text_size_percent(),"ui_scale_percent":s.get_ui_scale_percent(),
@@ -137,7 +142,13 @@ fn request(request: Value) -> Result<Value> {
         snapshot["sync_message"] = json!(s.get_sync_message().as_str());
         snapshot["sync_busy"] = json!(s.get_sync_busy());
         snapshot["sync_indexing"] = json!(s.get_sync_indexing());
+        snapshot["book_selection"] = json!(s.get_book_selection());
+        snapshot["selected_book_count"] = json!(s.get_selected_book_count());
+        snapshot["remove_book_count"] = json!(s.get_remove_book_count());
         snapshot["source_selection"] = json!(s.get_source_selection());
+        snapshot["book_selection_generation"] = json!(super::ui::VIEW.with_borrow(|weak| weak.upgrade()
+            .map(|view| view.borrow().book_selection_generation()).unwrap_or(0)));
+        snapshot["remove_book_files"] = json!(s.get_remove_book_files());
         snapshot["selected_source_count"] = json!(s.get_selected_source_count());
         snapshot["remove_source_count"] = json!(s.get_remove_source_count());
         snapshot["sources"] = json!(s.get_sources().iter().map(|row| json!({

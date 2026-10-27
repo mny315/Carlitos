@@ -106,6 +106,7 @@ lto = "thin"
 strip = true
 
 [patch.crates-io]
+symphonia-format-ogg = { path = "vendor/symphonia-format-ogg" }
 mp4ameta = { path = "vendor/mp4ameta" }
 i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }
 i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }

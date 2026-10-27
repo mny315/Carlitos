@@ -5,16 +5,25 @@ use anyhow::Result;
 use lofty::{config::ParseOptions, prelude::*, probe::Probe};
 use std::io::{Read, Seek};
 
-fn tagged(reader: &mut (impl Read + Seek)) -> Result<lofty::file::TaggedFile> {
+fn tagged(
+    reader: &mut (impl Read + Seek),
+    read_cover_art: bool,
+) -> Result<lofty::file::TaggedFile> {
     reader.rewind()?;
     Ok(Probe::new(reader)
-        .options(ParseOptions::new().read_properties(false))
+        .options(
+            ParseOptions::new()
+                .read_properties(false)
+                .read_cover_art(read_cover_art),
+        )
         .guess_file_type()?
         .read()?)
 }
 
 pub(crate) fn read_sort_tags(reader: &mut (impl Read + Seek)) -> Result<BookTags> {
-    let tagged = tagged(reader)?;
+    // Background sort-tag refreshes need only text. Skip picture blocks rather
+    // than allocating embedded artwork for every file in the library again.
+    let tagged = tagged(reader, false)?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
     Ok(BookTags {
         year: tag.and_then(|t| t.date()).map(|v| i32::from(v.year)),
@@ -34,7 +43,7 @@ fn read_with_cover(
     media: &mut Media,
     save_cover: impl FnOnce(&[u8]) -> Result<String>,
 ) {
-    if let Ok(tagged) = tagged(reader) {
+    if let Ok(tagged) = tagged(reader, true) {
         media.sort_tags_read = true;
         if let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) {
             media.title = tag

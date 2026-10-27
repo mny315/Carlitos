@@ -57,10 +57,9 @@ impl ParseAtom for Chpl<'_> {
 
         let num_entries = reader.read_u8()?;
         let table_size = size.content_len() - header_size;
-        let mut buf = vec![0; table_size as usize];
-        reader.read_exact(&mut buf)?;
-
-        let mut cursor = std::io::Cursor::new(buf);
+        // At most 255 entries follow. Large padding must not turn this small
+        // list into an allocation proportional to the entire atom's size.
+        let mut cursor = (&mut *reader).take(table_size);
 
         let mut chpl = Vec::with_capacity(num_entries as usize);
         for _ in 0..num_entries {
@@ -71,6 +70,7 @@ impl ParseAtom for Chpl<'_> {
 
             chpl.push(ChplItem { start, title });
         }
+        reader.seek(SeekFrom::Start(bounds.end()))?;
 
         Ok(Self {
             state: State::Existing(bounds),

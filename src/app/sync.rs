@@ -32,6 +32,7 @@ impl Controller {
             self.sync.take();
             self.sync_hash_control.cancel();
             let _ = self.events.try_send(Event::SyncIndexing(false));
+            let _ = self.events.try_send(Event::SyncReady(vec![]));
             #[cfg(target_os = "android")]
             crate::android::bridge::dispatch(
                 serde_json::json!({"op":"sync-network", "enabled":false}),
@@ -45,11 +46,20 @@ impl Controller {
             return;
         }
         let library = self.library.clone();
-        match self
-            .store()
-            .and_then(|s| Ok((s.sync_records(&library)?, s.sync_rates(&library)?)))
-        {
-            Ok((records, rates)) => self.sync.as_ref().unwrap().publish(records, rates),
+        match self.store().and_then(|s| {
+            Ok((
+                s.sync_records(&library)?,
+                s.sync_rates(&library)?,
+                crate::sync::Index::new(&library, &s.fingerprints()?)
+                    .books
+                    .into_keys()
+                    .collect(),
+            ))
+        }) {
+            Ok((records, rates, ready)) => {
+                let _ = self.events.try_send(Event::SyncReady(ready));
+                self.sync.as_ref().unwrap().publish(records, rates);
+            }
             Err(error) => self.notice(format!(
                 "{}: {error:#}",
                 text("Синхронизация", "Synchronization")
@@ -74,6 +84,9 @@ impl Controller {
             .library
             .media
             .iter()
+            // Removed books can leave cached media behind. Only files belonging
+            // to a current book contribute to its synchronization identity.
+            .filter(|m| self.library.parts.iter().any(|p| p.file_id == m.id))
             .filter(|m| !fingerprints.get(&m.id).is_some_and(|f| f.matches(m)))
             .filter(|m| {
                 !self
@@ -86,52 +99,66 @@ impl Controller {
             return Ok(());
         }
         let active = self.active_book();
-        files.sort_by_key(|file| {
-            self.library
-                .parts
-                .iter()
-                .filter(|p| p.file_id == file.id)
-                .map(|part| {
-                    if active == Some(part.book_id) {
-                        0
-                    } else if self
-                        .library
-                        .progress
-                        .iter()
-                        .any(|p| p.book_id == part.book_id)
-                    {
-                        1
-                    } else {
-                        2
-                    }
-                })
-                .min()
-                .unwrap_or(3)
-        });
-        self.sync_hash_control = ScanControl::default();
-        for file in &files {
-            self.sync_hash_attempted
-                .insert((file.id, Fingerprint::signature(file)));
+        let started: std::collections::HashSet<_> =
+            self.library.progress.iter().map(|p| p.book_id).collect();
+        let mut priorities = std::collections::HashMap::<_, u8>::new();
+        for part in &self.library.parts {
+            let priority = if active == Some(part.book_id) {
+                0
+            } else if started.contains(&part.book_id) {
+                1
+            } else {
+                2
+            };
+            priorities
+                .entry(part.file_id)
+                .and_modify(|old| *old = (*old).min(priority))
+                .or_insert(priority);
         }
+        files.sort_by_key(|file| priorities.get(&file.id).copied().unwrap_or(3));
+        self.sync_hash_control = ScanControl::default();
+        let attempted: Vec<_> = files
+            .iter()
+            .map(|file| (file.id, Fingerprint::signature(file)))
+            .collect();
         let cancelled = self.sync_hash_control.cancelled.clone();
         let tx = self.tx.clone();
+        self.reap_workers();
         let worker = std::thread::Builder::new()
             .name("carlitos-fingerprints".into())
             .spawn(move || {
-                let mut failed = false;
+                let mut failures = Vec::new();
                 for media in files {
                     if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    if let Ok(fingerprint) = Fingerprint::read(&media, &cancelled) {
-                        let _ = tx.send(Command::SyncFingerprints(vec![fingerprint], false));
-                    } else { failed = true; }
+                    match Fingerprint::read(&media, &cancelled) {
+                        Ok(fingerprint) => {
+                            let _ = tx.send(Command::SyncFingerprints(vec![fingerprint], false));
+                        }
+                        Err(error) => failures.push(format!("{}: {error:#}", media.relative)),
+                    }
                 }
-                if failed && !cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-                    let _ = tx.send(Command::Error(text("Не удалось подготовить часть книг к синхронизации. Проверьте доступ к файлам и нажмите «Синхронизировать».", "Some books could not be prepared for synchronization. Check file access and choose Sync.").into()));
+                if !failures.is_empty() && !cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = tx.send(Command::Error(format!(
+                        "{} {}. {} {}",
+                        text(
+                            "Не удалось подготовить файлы к синхронизации:",
+                            "Could not prepare files for synchronization:"
+                        ),
+                        failures.len(),
+                        failures.join("; "),
+                        text(
+                            "Проверьте доступ к этим файлам и включите синхронизацию снова.",
+                            "Check access to these files and start synchronization again."
+                        )
+                    )));
                 }
                 let _ = tx.send(Command::SyncFingerprints(vec![], true));
             })?;
+        // A failed thread spawn did not attempt any file and must not suppress
+        // subsequent background retries for the same signatures.
+        self.sync_hash_attempted.extend(attempted);
         self.sync_hashing = true;
         let _ = self.events.try_send(Event::SyncIndexing(true));
         self.scans.push(worker);
@@ -171,9 +198,20 @@ impl Controller {
         self.library = library;
         if active_changed {
             // Invalidate already queued decoder events before they can write
-            // the previous position back as a fresh local update.
+            // the previous position back as a fresh local update. A load can
+            // fail before advancing its token (closed audio, failed DB read).
             if let Some(Target::Book(part)) = self.library.session.current {
-                self.load(part, self.library.session.position, false)?;
+                let position = self.library.session.position;
+                let pending_rate = self.pending_rate;
+                self.stop();
+                self.pending_rate = pending_rate;
+                if let Err(error) = self.load(part, position, false) {
+                    // The remote progress is already committed. Publish it
+                    // even when its paused player could not be restored.
+                    self.emit_library();
+                    self.publish_sync();
+                    return Err(error);
+                }
             } else {
                 self.stop();
             }

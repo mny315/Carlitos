@@ -88,6 +88,17 @@ internal fun UiSuite.feedbackChecks() {
     check(elements().none { it.optString("label") == "Notification time remaining" })
     Thread.sleep(5200)
     check(call().getString("notice") == "Test error") { "An old timeout must not dismiss a new error" }
+    call("feedback", "kind" to "long-error")
+    Thread.sleep(400)
+    val longNotice = element("Notification", "Groupbox")
+    val longText = call().getString("notice")
+    fun movingText() = elements().last { it.getString("label") == longText }
+    check(movingText().getDouble("w") > longNotice.getDouble("w")) { "Full error text must be retained" }
+    val before = movingText().getDouble("x")
+    Thread.sleep(2400)
+    check(movingText().getDouble("x") < before - 10) { "Long error must scroll automatically" }
+    capture("scrolling-error")
+    check(!call().getBoolean("notice_timed")) { "Errors must stay until dismissed" }
     call("feedback", "kind" to "dismiss")
     call("page", "value" to 0)
     note("animated scan indicator, notification gap and countdown in both themes, restart, timeout and smooth collapse")

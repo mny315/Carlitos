@@ -30,6 +30,7 @@ impl Controller {
                 let path = std::path::PathBuf::from(
                     request["path"].as_str().context("Missing sync fixture")?,
                 );
+                let metadata = std::fs::metadata(&path)?;
                 let library = self.store()?.import(vec![Draft {
                     root_uri: file_uri(path.parent().context("Missing fixture directory")?)?,
                     title: "Sync fixture".into(),
@@ -37,10 +38,11 @@ impl Controller {
                     include: true,
                     files: vec![Media {
                         uri: file_uri(&path)?,
-                        identity: "sync-fixture".into(),
+                        identity: crate::platform::identity(&path)?,
                         relative: "book.wav".into(),
-                        size: Some(std::fs::metadata(&path)?.len()),
-                        modified: Some(1),
+                        size: Some(metadata.len()),
+                        modified: Some(crate::platform::modified(&metadata)),
+                        modified_subsec_nanos: crate::platform::modified_subsec_nanos(&metadata),
                         duration: Some(120_000),
                         title: "Sync fixture".into(),
                         ..Default::default()
@@ -91,7 +93,8 @@ impl Controller {
                 for (moving, scanning) in [(true, None), (false, Some(file.source_id))] {
                     self.maintenance = moving;
                     self.scan_source = scanning;
-                    let result = self.handle(Command::OpenDocument(file.clone()));
+                    let result =
+                        self.handle(Command::OpenDocument(Box::new(file.clone()), String::new()));
                     self.maintenance = maintenance;
                     self.scan_source = scan_source;
                     let error = result
@@ -136,7 +139,16 @@ impl Controller {
             )),
             "mute" => Some(Command::Mute),
             "cancel_scan" => Some(Command::CancelScan),
-            "import" => Some(Command::Import),
+            "scan" => Some(Command::Scan(
+                crate::source::Location::Document(
+                    request["uri"].as_str().context("Missing scan URI")?.into(),
+                ),
+                false,
+            )),
+            "import" => Some(Command::Import(
+                self.scan_generation,
+                request["owner"].as_str().unwrap_or_default().into(),
+            )),
             op => bail!("Unknown device test operation: {op}"),
         };
         if let Some(command) = command {
@@ -147,6 +159,7 @@ impl Controller {
         let rates = self.store()?.sync_rates(&library)?;
         Ok(
             json!({"books": self.library.books, "parts": self.library.parts,
+            "drafts":self.drafts.len(),
             "media": self.library.media, "session": self.library.session,
             "progress": self.library.progress, "saved": saved.session,
             "saved_progress": saved.progress, "settings": self.options.settings,

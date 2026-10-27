@@ -1,6 +1,56 @@
 use super::*;
 
 #[test]
+fn a_stale_absence_reply_cannot_replace_a_new_load_or_release_its_quit_barrier() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, _) = controller(temp.path())?;
+    let part = app.library.parts[0].id;
+    app.library.session.current = Some(Target::Book(part));
+    app.library.update_progress(3_000, false);
+    app.stop();
+    let stopped = app.token;
+    app.load(part, 5_000, true)?;
+    assert!(!app.handle(Command::AudioAbsent(stopped))?);
+    assert_eq!(app.playback.phase, crate::player::Phase::Loading);
+    assert_eq!(app.playback.position, 5_000);
+    app.quitting = true;
+    assert!(!app.handle(Command::AudioAbsent(stopped))?);
+    assert_eq!(app.playback.phase, crate::player::Phase::Loading);
+    // A current acknowledgement still releases Quit with confirmed progress.
+    assert!(app.handle(Command::AudioAbsent(app.token))?);
+    assert_eq!(app.store()?.load()?.session.position, 3_000);
+    Ok(())
+}
+
+#[test]
+fn resuming_a_selected_book_reloads_an_empty_audio_service_at_its_checkpoint() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, commands) = controller(temp.path())?;
+    let book = app.library.books[0].id;
+    let part = app.library.parts[0].id;
+    app.library.session.current = Some(Target::Book(part));
+    app.library.update_progress(3_000, false);
+    app.save()?;
+    // Android may restart a service for a setting command after a failed
+    // startup. Its Empty acknowledgement has no decoder behind the selection.
+    app.handle(Command::Playback(Playback {
+        phase: crate::player::Phase::Empty,
+        ..Default::default()
+    }))?;
+    app.handle(Command::Resume(book))?;
+    assert_eq!(app.playback.phase, crate::player::Phase::Loading);
+    assert_eq!(app.playback.position, 3_000);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.playback.phase != crate::player::Phase::Ready {
+        app.handle(commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?)?;
+    }
+    assert!(app.playback.playing);
+    assert!(app.playback.position.abs_diff(3_000) < 100);
+    assert_eq!(app.library.session.current, Some(Target::Book(part)));
+    Ok(())
+}
+
+#[test]
 fn transport_failures_are_retryable_and_ignore_superseded_commands() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let (mut app, _commands) = controller(temp.path())?;
@@ -187,5 +237,47 @@ fn retained_audio_errors_are_reported_once_after_a_stale_snapshot() -> Result<()
         }
     }
     assert_eq!(notices, ["Missing audio file"]);
+    Ok(())
+}
+
+#[test]
+fn a_stop_barrier_releases_the_recording_without_shutting_down_the_worker() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let library = fixture(temp.path())?;
+    let (tx, rx) = mpsc::channel();
+    let mut audio = Audio::start(tx, true);
+    let snapshot = |token, phase| -> Result<()> {
+        let until = Instant::now() + Duration::from_secs(5);
+        loop {
+            if matches!(rx.recv_timeout(until.saturating_duration_since(Instant::now()))?,
+                Command::Playback(p) if p.token == token && p.phase == phase)
+            {
+                return Ok(());
+            }
+        }
+    };
+    audio.send(AudioCommand::Load {
+        token: 1,
+        uri: library.media[0].uri.clone(),
+        position: 0,
+        playing: false,
+        rate: 1.0,
+    });
+    snapshot(1, crate::player::Phase::Ready)?;
+    audio.send(AudioCommand::Stop(2));
+    audio.wait_for_commands()?;
+    snapshot(2, crate::player::Phase::Empty)?;
+    std::fs::remove_file(local_path(&library.media[0].uri).unwrap())?;
+    assert!(!audio.is_closed());
+    audio.send(AudioCommand::Load {
+        token: 3,
+        uri: library.media[1].uri.clone(),
+        position: 0,
+        playing: false,
+        rate: 1.0,
+    });
+    snapshot(3, crate::player::Phase::Ready)?;
+    audio.stop();
+    audio.wait_for_commands()?;
     Ok(())
 }

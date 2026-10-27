@@ -38,6 +38,8 @@ impl Controller {
         // Load resets the latch; the final-part branch commits it only
         // after its progress has actually been saved.
         self.playback.ended = was_ended && snapshot.ended;
+        let preserve_progress = !snapshot.playing
+            && self.library.session.current == self.restore_progress.map(Target::Book);
         if matches!(
             snapshot.phase,
             crate::player::Phase::Ready | crate::player::Phase::Empty
@@ -65,14 +67,31 @@ impl Controller {
                 .events
                 .try_send(Event::Settings(self.options.settings.clone()));
         }
+        let mut published = snapshot.clone();
+        published.preserve_progress = preserve_progress;
+        // Keep preference acknowledgements before their playback snapshot.
+        // A failed checkpoint must still expose the confirmed audio state.
+        let _ = self.events.try_send(Event::Playback(published));
         if snapshot.phase == crate::player::Phase::Ready {
             if let Some((book, rate)) = self.pending_rate
                 && self.active_book() == Some(book)
                 && (snapshot.rate - rate).abs() < 0.000_001
             {
-                self.store()?.save_book_rate(book, rate)?;
-                self.pending_rate = None;
-                self.publish_sync();
+                match self
+                    .store()
+                    .and_then(|store| store.save_book_rate(book, rate))
+                {
+                    Ok(()) => {
+                        self.pending_rate = None;
+                        self.publish_sync();
+                    }
+                    Err(error) => {
+                        // A speed acknowledgement also carries the confirmed
+                        // position and possibly a shutdown barrier. Preserve
+                        // those even if this independent preference write fails.
+                        self.notice(format!("{error:#}"));
+                    }
+                }
             }
             let completed = self.active_book().is_some_and(|book| {
                 self.library
@@ -85,9 +104,7 @@ impl Controller {
                     || snapshot
                         .duration
                         .is_some_and(|duration| snapshot.position >= duration));
-            if snapshot.playing
-                || self.library.session.current != self.restore_progress.map(Target::Book)
-            {
+            if !preserve_progress {
                 self.library.update_progress(snapshot.position, completed);
             }
             if let Some(duration) = snapshot.duration
@@ -118,7 +135,6 @@ impl Controller {
             }
             self.notice(error.clone());
         }
-        let _ = self.events.try_send(Event::Playback(snapshot.clone()));
         if self.quitting && snapshot.barrier {
             let session = self.library.session.clone();
             let progress = self.library.progress.clone();

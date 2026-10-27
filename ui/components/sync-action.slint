@@ -4,8 +4,8 @@ import { Action } from "controls.slint";
 
 export component SyncToggle inherits Action {
     in property <bool> icon-only: false;
-    // This icon reports the mode, matching the refresh control below it.
-    icon: State.sync-running ? @image-url("../icons/play.svg") : @image-url("../icons/pause.svg");
+    icon: @image-url("../icons/refresh.svg");
+    spinning: State.sync-running;
     selected: State.sync-running;
     text: icon-only ? "" : State.sync-running ? Theme.t("Обмен включён", "Sync running") : Theme.t("Обмен на паузе", "Sync paused");
     accessible-label: State.sync-running ? Theme.t("Приостановить синхронизацию", "Pause synchronization") : Theme.t("Включить синхронизацию", "Start synchronization");

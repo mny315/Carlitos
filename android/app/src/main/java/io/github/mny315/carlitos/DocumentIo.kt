@@ -76,5 +76,6 @@ internal object DocumentIo {
             .put("directory", text(2) == DC.Document.MIME_TYPE_DIR)
             .put("mime", text(2)).put("size", number(3)).put("modified", number(4))
             .put("virtual", (number(5) as? Long ?: 0L).toInt() and DC.Document.FLAG_VIRTUAL_DOCUMENT != 0)
+            .put("deletable", (number(5) as? Long ?: 0L).toInt() and DC.Document.FLAG_SUPPORTS_DELETE != 0)
     }
 }

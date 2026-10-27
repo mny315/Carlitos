@@ -138,6 +138,12 @@ fn slider_step(
                     last_is(0.3 + 5. / 120.),
                     "seek uses the new part position after a cancelled drag",
                 );
+                super::book_selection::selection_checks();
+                super::book_selection::restoration_checks();
+                super::sources::restoration_checks();
+                super::editor::completion_checks();
+                super::imports::completion_checks();
+                super::shortcuts::platform_checks();
                 println!("UI CHECKS PASSED");
                 s.invoke_action("quit".into(), "".into());
                 return;

@@ -3,6 +3,7 @@ mod catalog;
 mod persistence;
 mod playback;
 mod scanning;
+mod sync;
 mod volume;
 
 use super::audio::AudioCommand;

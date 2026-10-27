@@ -8,6 +8,14 @@ use crate::{
 };
 use anyhow::Result;
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BookEdit {
+    pub owner: String,
+    pub title: String,
+    pub author: String,
+    pub cover: Option<String>,
+}
+
 pub enum Command {
     Sync(crate::sync::Request),
     SyncRefresh,
@@ -21,7 +29,7 @@ pub enum Command {
         std::sync::mpsc::Sender<anyhow::Result<serde_json::Value>>,
     ),
     #[cfg(target_os = "android")]
-    OpenDocument(Media),
+    OpenDocument(Box<Media>, String),
     #[cfg(target_os = "android")]
     Picked(String, String, String, String),
     Resume(Id),
@@ -36,14 +44,18 @@ pub enum Command {
     SeekFraction(f64),
     Exact(String),
     Volume(f64),
+    VolumeStep(bool),
     Rate(f64),
     RateStep(bool),
     SkipSilence(bool),
     Mute,
     Complete(Id),
     ResetProgress(Id),
+    CompleteBooks(Vec<Id>, u64),
+    ResetBooksProgress(Vec<Id>, u64),
+    RemoveBooks(Vec<Id>, bool, u64),
     MovePart(Id, bool),
-    Edit(Id, String, String, Vec<Id>, Option<String>),
+    Edit(Id, BookEdit, Vec<Id>),
     PrepareCover(u64, Location),
     TagsRead(Vec<(Media, BookTags)>),
     RemoveBook(Id),
@@ -55,12 +67,13 @@ pub enum Command {
     Scan(Location, bool),
     CancelScan,
     ScanDone(u64, Result<ScanResult>),
-    DraftEdit(usize, String, String, bool),
-    DraftFile(usize, String, String),
-    Import,
+    DraftEdit(u64, usize, String, String, bool),
+    DraftFile(u64, usize, String, String),
+    Import(u64, String),
     Settings(Settings),
     Playback(Playback),
     AudioFailed(u64, String),
+    AudioAbsent(u64),
     AudioStopped,
     Relocated(Id, Result<()>),
     Error(String),
@@ -69,6 +82,8 @@ pub enum Command {
     Quit,
 }
 pub enum Event {
+    BooksChanged(u64),
+    SyncReady(Vec<Id>),
     SyncIndexing(bool),
     SyncStatus(crate::sync::Status),
     #[cfg(target_os = "android")]
@@ -77,13 +92,13 @@ pub enum Event {
     Picked(String, String, String, String),
     Library(Box<Library>),
     Playback(Playback),
-    Drafts(Vec<Draft>, Vec<String>),
+    Drafts(u64, Vec<Draft>, Vec<String>),
     Volume(f64, bool),
     Scanning(bool, String),
     Settings(Settings),
     Notice(String),
-    Imported,
-    BookEdited(Id),
+    Imported(u64, String),
+    BookEdited(Id, BookEdit),
     CoverPrepared(u64, Result<String>),
     SourceUpdating(bool),
     SourceUpdated(Id, String),

@@ -15,3 +15,17 @@ so the locally built dependency does not introduce `unused_parens` warnings.
 Regression: `import::chapters::tests::chapter_tracks_can_change_the_number_of_samples_per_chunk`
 constructs a QuickTime chapter track with three chapters in two chunks. FFprobe
 reads all three chapters; the unpatched crate returns only the first two.
+
+`src/atom/util.rs`, `src/atom/mod.rs`, `src/error.rs`: return `InvalidTimescale`
+for a zero movie/chapter timescale instead of dividing by zero. Bound chapter
+titles by their sample sizes, handle zero/one-byte UTF-8 titles without reading
+into the next sample, and reject odd UTF-16 lengths.
+
+`src/atom/chpl.rs`: read chapter-list entries through an atom-bounded reader and
+seek past remaining padding. The count is at most 255; allocating and reading
+the entire atom could otherwise consume memory proportional to unrelated
+padding. Keep truncated titles from reading bytes in the following atom.
+
+These reader changes are covered by `import::chapters::tests`, including direct
+parser errors, short/BOM titles, independent damaged chapter formats and a
+padded chapter list read through a reader that rejects large buffer requests.

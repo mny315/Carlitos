@@ -15,6 +15,14 @@ Tests add their own metadata, chapters and cover images to temporary copies.
 import-offset.opus is import.opus with all nonzero Ogg granule positions increased
 by 48000 and the affected page CRCs recomputed. It tests nonzero stream origins.
 
+import-manyframes.opus uses 48 short frames per 120 ms Opus packet. Its source:
+ffmpeg -f lavfi -i sine=frequency=523:sample_rate=48000:duration=0.24 -ac 1 -c:a libopus -application lowdelay -cutoff 4000 -vbr off -b:a 32k -frame_duration 2.5 -map_metadata -1 shortframes.opus
+The 97 audio packets were joined in groups of 48 using libopus's repacketizer,
+then written to Ogg pages with updated lacing, sequence numbers and CRCs.
+The original 120-sample pre-skip and final granule position 11640 are retained.
+FFmpeg decodes exactly 11520 mono samples (240 ms); the fixture tests the six-bit
+Opus frame count, full decoding and seeking in the Windows decoder.
+
 HE-AAC fixtures use GStreamer's fdkaacenc, then lossless remuxing with FFmpeg:
 ffmpeg -f lavfi -i sine=frequency=440:duration=1 -ac 2 -ar 48000 source.wav
 for profile in he-aac-v1 he-aac-v2; do

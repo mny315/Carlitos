@@ -1,7 +1,7 @@
 use super::*;
 use std::path::Path;
 
-fn legacy(path: &Path) -> Result<Store> {
+pub(super) fn legacy(path: &Path) -> Result<Store> {
     let conn = Connection::open(path)?;
     conn.execute_batch(include_str!("../schema.sql"))?;
     conn.execute_batch(
@@ -40,7 +40,7 @@ fn legacy(path: &Path) -> Result<Store> {
     Ok(store)
 }
 
-fn snapshot(mut library: Library) -> serde_json::Value {
+pub(super) fn snapshot(mut library: Library) -> serde_json::Value {
     // Compare the same instant before and after the seconds-to-millis migration.
     for progress in &mut library.progress {
         if progress.updated < 100_000_000_000 {
@@ -74,7 +74,7 @@ fn v4_path_migration_preserves_all_library_data_indexes_and_triggers() -> Result
         migrated
             .conn
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))?,
-        7
+        8
     );
     assert_eq!(
         migrated

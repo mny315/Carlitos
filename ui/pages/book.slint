@@ -2,6 +2,7 @@ import { ListView, ScrollView } from "std-widgets.slint";
 import { State } from "../state.slint";
 import { Theme } from "../components/theme.slint";
 import { Action, Label, Meter, Cover, PlaybackIndicator } from "../components/controls.slint";
+import { MarqueeLabel } from "../components/marquee.slint";
 
 component BookSummary inherits HorizontalLayout {
     vertical-stretch: 0;
@@ -23,7 +24,7 @@ component BookSummary inherits HorizontalLayout {
         }
     }
     VerticalLayout { spacing: 10px; alignment: start;
-        Label { text: State.selected.title; font-size: (State.compact ? 22px : 28px) * Theme.font-scale; font-weight: 650; wrap: word-wrap; }
+        MarqueeLabel { text: State.selected.title; font-size: (State.compact ? 22px : 28px) * Theme.font-scale; font-weight: 650; active: State.page == 1 && State.overlay == 0; }
         Label { text: State.selected.author; color: Theme.muted; wrap: word-wrap; }
         if State.selected.tags != "": Label { text: State.selected.tags; color: Theme.muted; font-size: (12px) * Theme.font-scale; wrap: word-wrap; }
         Label { text: State.selected.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; wrap: word-wrap; }
@@ -34,10 +35,13 @@ component BookSummary inherits HorizontalLayout {
 export component BookPage inherits Rectangle {
     VerticalLayout {
         spacing: 16px;
+        padding-top: State.android ? 12px : 0px;
         HorizontalLayout {
+            height: Theme.action-height;
+            vertical-stretch: 0;
             Action { icon: @image-url("../icons/back.svg"); text: !State.android && State.compact && State.contents ? Theme.t("К книге", "Book") : Theme.t("Библиотека", "Library"); quiet: true; clicked => { if (!State.android && State.compact && State.contents) { State.contents = false; } else { State.navigate(0); } } }
             Rectangle { horizontal-stretch: 1; }
-            if State.reorder: Action { text: Theme.t("Готово", "Done"); icon: @image-url("../icons/check.svg"); primary: true; clicked => { State.reorder = false; } }
+            if State.reorder && (!State.android || State.short-screen): Action { text: Theme.t("Готово", "Done"); icon: @image-url("../icons/check.svg"); primary: true; clicked => { State.reorder = false; } }
             if !State.reorder: Action { icon: @image-url("../icons/more.svg"); accessible-label: Theme.t("Редактировать книгу", "Edit book"); quiet: true; clicked => { State.action("begin-edit", State.selected.key); } }
         }
         if !State.compact: BookSummary { }
@@ -45,9 +49,14 @@ export component BookPage inherits Rectangle {
             spacing: 12px;
             Cover { source: State.selected.cover; initials: State.selected.initials; variant: State.selected.variant; width: 54px; height: 72px; }
             VerticalLayout { spacing: 4px; alignment: center;
-                Label { text: State.selected.title; font-weight: 650; wrap: word-wrap; max-height: Theme.body * 3; }
+                MarqueeLabel { text: State.selected.title; font-weight: 650; active: State.page == 1 && State.overlay == 0; }
                 Label { text: State.selected.author; color: Theme.muted; }
                 Label { text: State.selected.detail; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
+            }
+            if State.reorder: Action {
+                text: Theme.t("Готово", "Done");
+                icon: @image-url("../icons/check.svg"); primary: true;
+                clicked => { State.reorder = false; }
             }
             Action {
                 icon: State.playing && State.selected.key == State.current.key ? @image-url("../icons/pause.svg") : @image-url("../icons/play.svg");
@@ -86,7 +95,7 @@ export component BookPage inherits Rectangle {
                             if !part.active: Label { text: part.number; color: Theme.muted; font-size: (12px) * Theme.font-scale; }
                         }
                         VerticalLayout { spacing: 3px;
-                            Label { text: part.title; color: part.active ? Theme.accent : Theme.text; font-size: part.chapter ? 13px * Theme.font-scale : Theme.body; font-weight: part.active ? 600 : 400; }
+                            MarqueeLabel { text: part.title; active: State.page == 1 && State.overlay == 0; text-color: part.active ? Theme.accent : Theme.text; font-size: part.chapter ? 13px * Theme.font-scale : Theme.body; font-weight: part.active ? 600 : 400; }
                             Label { text: part.detail; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
                         }
                         if State.reorder && !part.chapter: Action { icon: @image-url("../icons/up.svg"); quiet: true; accessible-label: Theme.t("Выше", "Move up"); clicked => { State.action("part-up", part.key); } }

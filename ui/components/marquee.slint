@@ -1,0 +1,32 @@
+import { Theme } from "theme.slint";
+
+// Keep the full text available to accessibility. Only overflowing text moves,
+// with time to read both its beginning and end before the next pass.
+export component MarqueeLabel inherits Rectangle {
+    in property <string> text;
+    in property <color> text-color: Theme.text;
+    in property <length> font-size: Theme.body;
+    in property <int> font-weight: 400;
+    in property <bool> active: true;
+    private property <duration> started;
+    init => { root.started = animation-tick(); }
+    changed text => { root.started = animation-tick(); }
+    changed active => { root.started = animation-tick(); }
+    private property <length> travel: max(0px, message.preferred-width - self.width);
+    private property <float> phase: active && travel > 0px && !Theme.reduced-motion ? mod((animation-tick() - started) / 1ms, travel / 1px / 0.03 + 3600) : 0;
+    clip: true;
+    min-width: 0px;
+    horizontal-stretch: 1;
+    preferred-height: message.preferred-height;
+    min-height: message.preferred-height;
+    message := Text {
+        x: -clamp((root.phase - 1800) * 0.03px, 0px, root.travel);
+        width: self.preferred-width; height: parent.height;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        wrap: no-wrap;
+        vertical-alignment: center;
+    }
+}

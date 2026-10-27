@@ -13,6 +13,20 @@ impl View {
         };
         let state = w.global::<State>();
         match event {
+            Event::BooksChanged(selection) => {
+                if selection == self.book_selection_generation {
+                    self.action("clear-book-selection", "");
+                }
+            }
+            Event::SyncReady(books) => {
+                let ready = books.into_iter().collect();
+                if self.sync_ready != ready {
+                    self.sync_ready = ready;
+                    self.refresh_books();
+                    self.refresh_selected();
+                    self.refresh_current();
+                }
+            }
             Event::SyncIndexing(active) => state.set_sync_indexing(active),
             Event::SyncStatus(status) => {
                 state.set_sync_running(status.running);
@@ -67,6 +81,13 @@ impl View {
                 // A rescan can repair a cached image at the same path.
                 self.covers.clear_failures();
                 self.library = *library;
+                let books: std::collections::BTreeSet<_> =
+                    self.library.books.iter().map(|b| b.id).collect();
+                self.selected_books.retain(|id| books.contains(id));
+                if state.get_book_selection() && self.selected_books.is_empty() {
+                    state.set_book_selection(false);
+                    state.set_book_menu(false);
+                }
                 self.reindex();
                 state.set_loading(false);
                 state.set_book_count(self.library.books.len() as i32);
@@ -115,26 +136,32 @@ impl View {
                         .iter()
                         .find(|p| Some(p.book_id) == active_book)
                         .map(|p| p.completed);
-                    let completed = (self.playback.ended && self.library.neighbour(true).is_none())
-                        || (!self.playback.playing
-                            && self
-                                .playback
-                                .duration
-                                .is_some_and(|d| self.playback.position >= d)
-                            && self
-                                .library
-                                .session
-                                .current
-                                .as_ref()
-                                .and_then(|Target::Book(id)| self.library.part(*id))
-                                .is_some_and(|part| {
-                                    self.library
-                                        .progress
-                                        .iter()
-                                        .any(|p| p.book_id == part.book_id && p.completed)
-                                }));
-                    self.library
-                        .update_progress(self.playback.position, completed);
+                    let completed = if self.playback.preserve_progress {
+                        previous_status.unwrap_or(false)
+                    } else {
+                        (self.playback.ended && self.library.neighbour(true).is_none())
+                            || (!self.playback.playing
+                                && self
+                                    .playback
+                                    .duration
+                                    .is_some_and(|d| self.playback.position >= d)
+                                && self
+                                    .library
+                                    .session
+                                    .current
+                                    .as_ref()
+                                    .and_then(|Target::Book(id)| self.library.part(*id))
+                                    .is_some_and(|part| {
+                                        self.library
+                                            .progress
+                                            .iter()
+                                            .any(|p| p.book_id == part.book_id && p.completed)
+                                    }))
+                    };
+                    if !self.playback.preserve_progress {
+                        self.library
+                            .update_progress(self.playback.position, completed);
+                    }
                     if duration_changed {
                         self.refresh_selected();
                     }
@@ -155,7 +182,12 @@ impl View {
                 state.set_volume(volume as f32);
                 state.set_muted(muted);
             }
-            Event::Drafts(drafts, issues) => {
+            Event::Drafts(generation, drafts, issues) => {
+                let generation: slint::SharedString = generation.to_string().into();
+                if state.get_draft_generation() != generation {
+                    state.set_selected_draft(-1);
+                }
+                state.set_draft_generation(generation);
                 self.drafts = drafts;
                 if !usize::try_from(state.get_selected_draft())
                     .is_ok_and(|index| index < self.drafts.len())
@@ -196,13 +228,25 @@ impl View {
                 state.set_notice(message.into());
                 state.invoke_start_notice_timeout();
             }
-            Event::Imported => {
-                state.set_page(0);
-                state.set_selected_draft(-1);
-                state.invoke_start_notice_timeout();
+            Event::Imported(generation, owner) => {
+                if state.get_draft_generation().parse::<u64>().unwrap_or(0) == generation
+                    && state.get_picker_owner() == owner
+                {
+                    state.set_page(0);
+                    state.set_selected_draft(-1);
+                    state.invoke_start_notice_timeout();
+                }
             }
-            Event::BookEdited(id) => {
-                if state.get_overlay() == 2 && state.get_edit_key() == id.to_string() {
+            Event::BookEdited(id, edit) => {
+                // Saving runs on the controller. Its acknowledgement may arrive
+                // after reopening this book or entering further unsaved text.
+                if state.get_overlay() == 2
+                    && state.get_edit_key() == id.to_string()
+                    && state.get_picker_owner() == edit.owner
+                    && state.get_edit_title().trim() == edit.title.trim()
+                    && state.get_edit_author().trim() == edit.author.trim()
+                    && state.get_edit_cover_path().as_str() == edit.cover.as_deref().unwrap_or("")
+                {
                     state.set_overlay(0);
                 }
             }

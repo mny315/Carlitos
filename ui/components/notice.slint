@@ -1,6 +1,6 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Action, Label } from "controls.slint";
+import { Action } from "controls.slint";
+import { MarqueeLabel } from "marquee.slint";
 
 export component NoticeBanner inherits Rectangle {
     in property <string> text;
@@ -13,8 +13,7 @@ export component NoticeBanner inherits Rectangle {
     animate reveal { duration: Theme.reduced-motion ? 0ms : 220ms; easing: ease-in-out; }
     changed text => { if (self.text != "") { self.shown-text = self.text; } }
     callback dismissed;
-    // Measure the text, not the ScrollView's preferred size. A short notice
-    // takes one compact row; longer messages remain readable by scrolling.
+    // Keep the banner compact and reveal the entire message automatically.
     private property <length> card-height: max(Theme.touch ? 48px : 36px, min(72px * Theme.font-scale, message.preferred-height) + 12px);
     height: reveal * (top-gap + card-height + bottom-gap);
     opacity: reveal;
@@ -28,17 +27,14 @@ export component NoticeBanner inherits Rectangle {
         background: Theme.tint; border-radius: 8px;
         border-width: 1px; border-color: Theme.line;
     }
-    ScrollView {
+    message := MarqueeLabel {
         x: 12px; y: root.top-gap + 6px;
         width: root.width - 12px - dismiss.width;
         height: root.card-height - 12px;
-        content-width: self.width;
-        message := Label {
-            text: root.shown-text;
-            wrap: word-wrap;
-            color: Theme.accent;
-            font-size: 13px * Theme.font-scale;
-        }
+        text: root.shown-text;
+        active: root.text != "";
+        text-color: Theme.accent;
+        font-size: 13px * Theme.font-scale;
     }
     if root.timed && root.text != "": Rectangle {
         x: 12px; y: root.top-gap + root.card-height - 5px;

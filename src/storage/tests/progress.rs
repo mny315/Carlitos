@@ -32,7 +32,7 @@ fn checkpoints_write_only_changed_progress_and_session() -> Result<()> {
 }
 
 #[test]
-fn removed_selection_cannot_attach_to_a_reused_part_id() -> Result<()> {
+fn removed_selection_cannot_attach_to_a_new_part() -> Result<()> {
     for remove_source in [false, true] {
         let temp = tempfile::tempdir()?;
         let mut store = Store::open(&temp.path().join("db"))?;
@@ -47,7 +47,7 @@ fn removed_selection_cannot_attach_to_a_reused_part_id() -> Result<()> {
             store.remove_book(library.books[0].id)?;
         }
         let after = store.import(vec![draft("new", 1)])?;
-        assert_eq!(after.parts[0].id, part, "fixture must exercise ID reuse");
+        assert_ne!(after.parts[0].id, part, "removed IDs must not be reused");
         assert!(after.session.current.is_none());
         assert_eq!(after.session.position, 0);
         assert!(after.progress.is_empty());

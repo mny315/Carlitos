@@ -146,6 +146,7 @@ class MainActivity : NativeActivity() {
             }
             putExtra(Intent.EXTRA_LOCAL_ONLY, true)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            if (code != 4) addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }, code)
     }
     @Deprecated("NativeActivity uses the platform result callback")
@@ -168,7 +169,7 @@ class MainActivity : NativeActivity() {
                 Documents.persist(uri, flags)
                 val doc = if (request == 1) Documents.probe(uri) else Documents.stat(uri)
                 if (request == 2 || request == 3) check(doc.getBoolean("directory")) { "Choose a folder" }
-                if (request == 1) Bridge.emit("document", "document" to doc)
+                if (request == 1) Bridge.emit("document", "document" to doc, "owner" to owner)
                 else Bridge.emit("picked", "kind" to when (request) { 2 -> "folder"; 3 -> "source"; else -> "cover" },
                     "uri" to doc.getString("uri"), "name" to doc.getString("name"), "owner" to owner)
             } catch (error: Exception) {

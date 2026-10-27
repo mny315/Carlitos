@@ -258,3 +258,39 @@ fn real_hardlinks_share_a_stable_file_and_part() -> Result<()> {
     assert_eq!(lib.parts.len(), 1);
     Ok(())
 }
+
+#[test]
+fn removing_books_cleans_empty_book_sources_and_repairs_old_removals() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let database = temp.path().join("db");
+    let mut store = Store::open(&database)?;
+    let before = store.import(vec![draft("one", 1), draft("keep", 1)])?;
+    let first = before.books.iter().find(|b| b.title == "one").unwrap();
+    let other = before.books.iter().find(|b| b.title == "keep").unwrap();
+    let collection = store.ensure_folder("file:///collection")?;
+    let alias = store.conn.query_row(
+        "INSERT INTO sources(uri,kind) VALUES('content://provider/document/alias','book') RETURNING id", [], |r| r.get::<_, Id>(0),
+    )?;
+    store.conn.execute(
+        "INSERT INTO source_files(source_id,file_id,relative) VALUES(?1,?2,'alias.wav')",
+        params![alias, before.book_parts(other.id)[0].file_id],
+    )?;
+    let after = store.remove_books(&[first.id])?;
+    assert!(!after.sources.iter().any(|s| s.id == first.source_id));
+    assert_eq!(after.books.len(), 1);
+    assert_eq!(after.books[0].id, other.id);
+    assert!(after.sources.iter().any(|s| s.id == collection));
+    assert!(after.sources.iter().any(|s| s.id == alias));
+    assert_eq!(after.media.len(), 1);
+    assert_eq!(after.parts[0].id, before.book_parts(other.id)[0].id);
+    // Simulate the old code leaving book/source/file records behind.
+    store
+        .conn
+        .execute("DELETE FROM books WHERE id=?1", [other.id])?;
+    drop(store);
+    let after = Store::open(&database)?.load()?;
+    assert!(after.books.is_empty() && after.parts.is_empty() && after.media.is_empty());
+    assert_eq!(after.sources.len(), 1);
+    assert_eq!(after.sources[0].id, collection);
+    Ok(())
+}

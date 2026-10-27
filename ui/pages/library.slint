@@ -2,40 +2,70 @@ import { ListView, ComboBox } from "std-widgets.slint";
 import { State, BookItem } from "../state.slint";
 import { Theme } from "../components/theme.slint";
 import { Action, Label, Field, Meter, Cover, PlaybackIndicator } from "../components/controls.slint";
-import { SyncAction, SyncToggle } from "../components/sync-action.slint";
+import { SyncToggle } from "../components/sync-action.slint";
+import { MarqueeLabel } from "../components/marquee.slint";
 
 component BookRow inherits Rectangle {
     in property <BookItem> book;
+    private property <float> selection-reveal: State.book-selection ? 1 : 0;
+    private property <float> check-reveal: root.book.selected ? 1 : 0;
+    animate selection-reveal { duration: Theme.page-motion; easing: ease-out; }
+    animate check-reveal { duration: Theme.motion; easing: ease-out; }
+    function activate() { State.action(State.book-selection ? "select-book" : "open-book", root.book.key); }
     row := Rectangle {
         private property <bool> current: State.active && State.current.key == root.book.key;
         private property <bool> playing: current && State.playing;
         x: Theme.reduced-motion ? 0px : root.book.move-offset-x * (parent.width + 24px) * (1 - State.books-move-progress);
         y: Theme.reduced-motion ? 0px : (root.book.move-offset * parent.height + State.books-move-scroll-y) * (1 - State.books-move-progress);
         width: parent.width; height: parent.height; border-radius: 10px;
-        background: current ? (Theme.dark ? Theme.tint : Theme.surface.mix(Theme.accent, 80%)) : !State.android && book-focus.has-focus ? Theme.tint : !State.android && book-touch.has-hover ? Theme.surface : transparent;
+        background: root.book.selected ? Theme.tint : current ? (Theme.dark ? Theme.tint : Theme.surface.mix(Theme.accent, 80%)) : !State.android && book-focus.has-focus ? Theme.tint : !State.android && book-touch.has-hover ? Theme.surface : transparent;
+        border-width: 1px;
+        border-color: Theme.accent.with-alpha(current ? 1 : root.check-reveal);
         animate background { duration: Theme.control-motion; }
         accessible-role: button;
         accessible-label: root.book.title + " · " + root.book.author + (playing ? Theme.t(" · Воспроизводится", " · Now playing") : current ? Theme.t(" · На паузе", " · Paused") : "");
-        accessible-action-default => { State.action("open-book", root.book.key); }
+        accessible-action-default => { root.activate(); }
         book-focus := FocusScope {
             key-pressed(event) => {
                 if (event.text == Key.Return || event.text == " ") {
-                    State.action("open-book", root.book.key);
+                    root.activate();
                     return accept;
                 }
                 return reject;
             }
         }
         book-touch := TouchArea {
-            clicked => { book-focus.focus(); Theme.haptic("button"); State.action("open-book", root.book.key); }
+            clicked => { book-focus.focus(); Theme.haptic("button"); root.activate(); }
         }
         HorizontalLayout {
             padding: 10px; spacing: 14px;
-            Cover { source: root.book.cover; initials: root.book.initials; variant: root.book.variant; width: State.compact ? 44px : 48px; height: 64px; }
+            Rectangle {
+                width: State.compact ? 44px : 48px; height: 64px;
+                Cover { source: root.book.cover; initials: root.book.initials; variant: root.book.variant; width: parent.width; height: parent.height; }
+                Rectangle {
+                    visible: root.selection-reveal > 0;
+                    opacity: root.selection-reveal;
+                    accessible-role: checkbox;
+                    accessible-label: Theme.t("Выбрать книгу: ", "Select book: ") + root.book.title;
+                    accessible-checked: root.book.selected;
+                    accessible-action-default => { if (State.book-selection) { root.activate(); } }
+                    width: 20px + 4px * root.selection-reveal; height: self.width;
+                    x: parent.width - self.width; y: parent.height - self.height + (1 - root.selection-reveal) * 6px;
+                    border-radius: 6px; border-width: 1px;
+                    border-color: Theme.accent.mix(Theme.muted, root.check-reveal);
+                    background: Theme.accent.mix(Theme.surface, root.check-reveal);
+                    Image {
+                        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                        width: 12px + 6px * root.check-reveal; height: self.width;
+                        opacity: root.check-reveal;
+                        source: @image-url("../icons/check.svg"); colorize: Theme.on-accent;
+                    }
+                }
+            }
             VerticalLayout { spacing: 5px; alignment: center;
                 HorizontalLayout { spacing: 8px;
                     if row.current: PlaybackIndicator { playing: row.playing; animation-enabled: State.page == 0; }
-                    Label { text: root.book.title; font-weight: 600; }
+                    MarqueeLabel { text: root.book.title; font-weight: 600; active: State.page == 0 && State.overlay == 0; }
                 }
                 Label { text: root.book.author + (State.sort-index >= 3 && root.book.tags != "" ? " · " + root.book.tags : ""); color: Theme.muted; font-size: (13px) * Theme.font-scale; }
                 HorizontalLayout { spacing: 8px;
@@ -43,27 +73,46 @@ component BookRow inherits Rectangle {
                     Label { text: root.book.detail; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
                 }
             }
-            HorizontalLayout {
-                spacing: State.android ? 0px : 14px;
+            Rectangle {
+                width: actions.preferred-width * (1 - root.selection-reveal);
+                height: Theme.action-height;
                 horizontal-stretch: 0;
-                Action {
-                    icon: @image-url("../icons/more.svg"); quiet: true; selected: State.book-menu && State.menu-book.key == root.book.key;
-                    accessible-label: Theme.t("Действия с книгой: ", "Book actions: ") + root.book.title;
-                    clicked => { State.menu-book = root.book; State.book-menu-x = self.absolute-position.x + self.width; State.book-menu-y = self.absolute-position.y; State.book-menu = true; }
-                }
-                if State.android || !State.compact: Action {
-                    icon: row.playing ? @image-url("../icons/pause.svg") : root.book.completed && !State.android ? @image-url("../icons/check.svg") : @image-url("../icons/play.svg");
-                    quiet: true;
-                    selected: State.android && row.current;
-                    accessible-label: (row.playing ? Theme.t("Пауза: ", "Pause: ") : root.book.completed ? Theme.t("Слушать снова: ", "Play again: ") : root.book.started ? Theme.t("Продолжить: ", "Continue: ") : Theme.t("Слушать: ", "Play: ")) + root.book.title;
-                    clicked => { State.action("resume", root.book.key); }
+                opacity: 1 - root.selection-reveal;
+                clip: true;
+                FocusScope {
+                    width: actions.preferred-width; height: parent.height;
+                    enabled: !State.book-selection;
+                    actions := HorizontalLayout {
+                        spacing: State.android ? 0px : 14px;
+                        horizontal-stretch: 0;
+                        book-menu-action := Action {
+                            icon: @image-url("../icons/more.svg"); quiet: true; selected: State.book-menu && State.menu-book.key == root.book.key;
+                            accessible-label: Theme.t("Действия с книгой: ", "Book actions: ") + root.book.title;
+                            clicked => { State.menu-book = root.book; State.book-menu-x = self.absolute-position.x + self.width; State.book-menu-y = self.absolute-position.y; State.book-menu = true; }
+                        }
+                        if State.android || !State.compact: Action {
+                            icon: row.playing ? @image-url("../icons/pause.svg") : root.book.completed && !State.android ? @image-url("../icons/check.svg") : @image-url("../icons/play.svg");
+                            quiet: true;
+                            selected: State.android && row.current;
+                            accessible-label: (row.playing ? Theme.t("Пауза: ", "Pause: ") : root.book.completed ? Theme.t("Слушать снова: ", "Play again: ") : root.book.started ? Theme.t("Продолжить: ", "Continue: ") : Theme.t("Слушать: ", "Play: ")) + root.book.title;
+                            clicked => { State.action("resume", root.book.key); }
+                        }
+                    }
                 }
             }
+        }
+        if State.local-sync && root.book.sync-ready && !State.book-selection: Image {
+            source: @image-url("../icons/sync-ready.svg");
+            x: book-menu-action.absolute-position.x - row.absolute-position.x + (book-menu-action.width - self.width) / 2;
+            y: parent.height - self.height - 6px;
+            width: 15px; height: 15px; colorize: Theme.accent;
+            accessible-label: Theme.t("Готова к синхронизации: ", "Ready to sync: ") + root.book.title;
         }
     }
 }
 
 component FilterAction inherits Action {
+    enabled: !State.book-selection;
     height: State.android ? max(40px, Theme.body + 12px) : Theme.action-height;
 }
 
@@ -90,7 +139,19 @@ export component LibraryPage inherits VerticalLayout {
     private property <int> touch-axis;
     private property <length> touch-start-x;
     private property <length> touch-start-y;
-    private property <bool> swipe-enabled: State.android && State.page == 0 && State.overlay == 0 && !State.book-menu && !State.books-moving && transition-phase == 0;
+    private property <string> hold-key;
+    private property <bool> touch-held;
+    private property <bool> touch-enabled: State.android && State.ui-visible && State.page == 0 && State.overlay == 0 && !State.book-menu && !State.books-moving && transition-phase == 0;
+    private property <bool> swipe-enabled: touch-enabled && !State.book-selection;
+    Timer {
+        interval: 500ms;
+        running: root.touch-tracking && root.touch-axis == 0 && root.hold-key != "" && !root.touch-held && root.touch-enabled;
+        triggered => {
+            root.touch-held = true;
+            Theme.haptic("button");
+            State.action("select-book", root.hold-key);
+        }
+    }
     private property <duration> transition-start;
     private property <float> transition-progress: transition-phase == 0 ? 1 : clamp((animation-tick() - transition-start) / (transition-phase == 1 ? 100ms : 180ms), 0, 1);
     private property <float> transition-eased: 1 - pow(1 - transition-progress, 3);
@@ -101,37 +162,48 @@ export component LibraryPage inherits VerticalLayout {
     public function touch(phase: int, finger: int, x: length, y: length) -> bool {
         if (phase == 0) {
             if (touch-tracking) {
-                let consumed = swipe-dragging;
+                let consumed = swipe-dragging || touch-held;
                 root.release-swipe();
                 touch-tracking = false;
+                hold-key = "";
                 return consumed;
             }
             let position = library-body.absolute-position;
-            touch-tracking = swipe-enabled && x >= position.x && x < position.x + library-body.width && y >= position.y && y < position.y + library-body.height;
+            touch-tracking = touch-enabled && x >= position.x && x < position.x + library-body.width && y >= position.y && y < position.y + library-body.height;
             touch-start-x = x; touch-start-y = y;
             touch-finger = finger; touch-axis = 0;
+            touch-held = false;
+            let index = floor((y - position.y - State.books-scroll-y) / root.book-row-height);
+            hold-key = touch-tracking && index >= 0 && index < State.books.length ? State.books[index].key : "";
             return false;
         }
         if (!touch-tracking || finger != touch-finger) { return false; }
+        if (touch-held) {
+            if (phase == 2 || phase == 3) { touch-tracking = false; hold-key = ""; }
+            return true;
+        }
         let dx = x - touch-start-x;
         let dy = y - touch-start-y;
-        if (phase == 3 || !swipe-enabled) {
+        if (phase == 3 || !touch-enabled) {
             let consumed = swipe-dragging;
             root.release-swipe();
             touch-tracking = false;
+            hold-key = "";
             return consumed;
         }
         if (touch-axis == 0 && max(abs(dx), abs(dy)) >= 8px) {
             touch-axis = abs(dx) > abs(dy) * 1.5 ? 1 : 2;
+            hold-key = "";
         }
         let consumed = touch-axis == 1;
-        if (phase == 1 && consumed) {
+        if (phase == 1 && consumed && swipe-enabled) {
             swipe-dragging = true;
             swipe-offset = Theme.reduced-motion ? 0px : clamp(dx * ((State.filter == 0 && dx > 0px) || (State.filter == 2 && dx < 0px) ? 0.1 : 0.3), -48px, 48px);
         }
         if (phase == 2) {
             touch-tracking = false;
-            if (consumed && abs(dx) >= 56px && abs(dx) > abs(dy) * 1.5) {
+            hold-key = "";
+            if (consumed && swipe-enabled && abs(dx) >= 56px && abs(dx) > abs(dy) * 1.5) {
                 root.swipe-filter(dx < 0px ? 1 : -1, swipe-offset);
             }
             root.release-swipe();
@@ -188,7 +260,6 @@ export component LibraryPage inherits VerticalLayout {
             if !State.compact: Label { text: Theme.t("Хорошая история всегда рядом", "A good story, always within reach"); color: Theme.muted; }
         }
         if State.local-sync: SyncToggle { }
-        if State.local-sync: SyncAction { }
         Action { text: State.compact ? "" : Theme.t("Добавить книги", "Add books"); icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
     }
     Rectangle {
@@ -206,7 +277,6 @@ export component LibraryPage inherits VerticalLayout {
                 clicked => { State.close-search(); }
             }
             if State.compact && !State.android && State.local-sync: SyncToggle { icon-only: true; }
-            if State.compact && !State.android && State.local-sync: SyncAction { icon-only: true; }
             if State.compact && !State.android: Action { icon: @image-url("../icons/plus.svg"); primary: true; accessible-label: Theme.t("Добавить книги", "Add books"); clicked => { State.page = 2; } }
         }
     }
@@ -258,7 +328,7 @@ export component LibraryPage inherits VerticalLayout {
                 accessible-role: list;
                 content-y <=> State.books-scroll-y;
                 content-width: self.width;
-                content-height: State.books.length * root.book-row-height + (State.local-sync ? Theme.action-height * 2 + 36px : 0px);
+                content-height: State.books.length * root.book-row-height;
                 // Only instantiate visible rows, keeping long libraries cheap.
                 private property <int> first-row: max(0, floor(-self.content-y / root.book-row-height));
                 private property <int> row-count: max(0, min(State.books.length - first-row, ceil(self.height / root.book-row-height) + 2));
@@ -274,19 +344,6 @@ export component LibraryPage inherits VerticalLayout {
                 Label { text: State.loading ? Theme.t("Открываем библиотеку…", "Opening your library…") : State.book-count > 0 ? Theme.t("Ничего не найдено", "No matching books") : Theme.t("Здесь начнётся история", "Your next story starts here"); horizontal-alignment: center; wrap: word-wrap; font-size: (State.compact ? 18px : 22px) * Theme.font-scale; font-weight: 600; }
                 Label { text: State.book-count > 0 ? Theme.t("Измените поиск или фильтр", "Try another search or filter") : Theme.t("Добавьте папку с аудиокнигами", "Add a folder of audiobooks"); horizontal-alignment: center; wrap: word-wrap; color: Theme.muted; font-size: State.compact ? 12px * Theme.font-scale : Theme.body; }
                 if State.book-count == 0 && !State.compact: HorizontalLayout { alignment: center; Action { text: Theme.t("Выбрать папку", "Choose a folder"); icon: @image-url("../icons/plus.svg"); primary: true; clicked => { State.page = 2; State.choose-folder(); } } }
-            }
-        }
-        if State.android && State.local-sync: Rectangle {
-            x: parent.width - self.width - 8px;
-            y: max(0px, parent.height - self.height - 12px);
-            width: Theme.action-height + 8px;
-            height: Theme.action-height * 2 + 12px;
-            border-radius: 16px;
-            background: Theme.surface;
-            border-width: 1px; border-color: Theme.line;
-            VerticalLayout { padding: 4px; spacing: 4px;
-                SyncToggle { icon-only: true; quiet: true; }
-                SyncAction { icon-only: true; quiet: true; }
             }
         }
     }

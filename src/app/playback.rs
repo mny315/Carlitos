@@ -37,12 +37,12 @@ impl Controller {
         let book = self.library.part(id).context("Book part missing")?.book_id;
         let saved_rate = self.store()?.book_rate(book)?;
         let pending = self.pending_rate.filter(|(id, _)| *id == book);
-        self.requested_rate = pending
+        let requested_rate = pending
             .map(|(_, rate)| rate)
             .or(saved_rate)
             .unwrap_or(self.requested_rate);
-        self.pending_rate =
-            pending.or_else(|| saved_rate.is_none().then_some((book, self.requested_rate)));
+        let pending_rate =
+            pending.or_else(|| saved_rate.is_none().then_some((book, requested_rate)));
         if self.library.session.current != Some(Target::Book(id)) {
             self.save()?;
             self.library.session.position = self
@@ -52,6 +52,10 @@ impl Controller {
                 .find(|progress| progress.part_id == id && !progress.completed)
                 .map_or(0, |progress| progress.position);
         }
+        // A rejected checkpoint leaves the old recording playing. Only switch
+        // its speed request after that write succeeds, retaining any retry.
+        self.requested_rate = requested_rate;
+        self.pending_rate = pending_rate;
         self.library.session.current = Some(Target::Book(id));
         self.restore_progress = (!playing
             && self
@@ -119,7 +123,14 @@ impl Controller {
         {
             return self.load(first.id, 0, true);
         }
-        if value && self.playback.phase == crate::player::Phase::Error {
+        // A recreated service can acknowledge settings while still Empty.
+        // Resuming a selected book then needs a decoder load at its checkpoint.
+        if value
+            && matches!(
+                self.playback.phase,
+                crate::player::Phase::Error | crate::player::Phase::Empty
+            )
+        {
             return self.load(id, self.library.session.position, true);
         }
         self.token = self.token.wrapping_add(1);

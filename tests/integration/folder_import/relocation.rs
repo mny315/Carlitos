@@ -1,5 +1,37 @@
 use super::*;
 
+#[cfg(unix)]
+#[test]
+fn relocation_cannot_follow_a_nested_symlink_outside_the_selected_folder() -> anyhow::Result<()> {
+    let temp = tempdir()?;
+    let original = temp.path().join("original");
+    audio(&original, "nested/1.wav")?;
+    let mut store = Store::open(&temp.path().join("db"))?;
+    let library = store.import(
+        scan(
+            vec![original.clone()],
+            ImportMode::Book,
+            ScanControl::default(),
+        )?
+        .drafts,
+    )?;
+    let source = library.sources[0].id;
+    let outside = temp.path().join("outside");
+    std::fs::rename(original.join("nested"), &outside)?;
+    let destination = temp.path().join("destination");
+    std::fs::create_dir(&destination)?;
+    std::os::unix::fs::symlink(&outside, destination.join("nested"))?;
+    assert!(
+        store.relocate(source, &destination).is_err(),
+        "a regular leaf file must not hide an escaping parent symlink"
+    );
+    let after = store.load()?;
+    assert_eq!(after.sources[0].uri, library.sources[0].uri);
+    assert_eq!(after.media[0].uri, library.media[0].uri);
+    assert!(outside.join("1.wav").is_file());
+    Ok(())
+}
+
 #[test]
 fn relocating_a_child_refreshes_its_links_in_an_overlapping_parent() -> anyhow::Result<()> {
     for outside in [false, true] {

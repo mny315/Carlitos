@@ -43,14 +43,14 @@ internal fun UiSuite.syncButtonChecks() {
     Thread.sleep(350)
     check(!call().getBoolean("sync_running")) { "Synchronization must start paused" }
     val toggle = element("Start synchronization")
-    val refresh = element("Sync")
-    check(toggle.getDouble("h") >= 48 && toggle.getDouble("y") < refresh.getDouble("y"))
-    check(refresh.getDouble("x") > call().getDouble("width") / 2) { "Sync controls belong at bottom right" }
+    check(toggle.getDouble("h") >= 48 && toggle.getDouble("y") < 100)
+    check(toggle.getDouble("x") > call().getDouble("width") / 2) { "Sync toggle belongs at top right" }
+    check(elements().none { it.getString("label") == "Sync" }) { "Library must have a single sync toggle" }
     tap("Start synchronization")
     eventually("Synchronization resumed") { call().getBoolean("sync_running") }
     tap("Pause synchronization")
     eventually("Synchronization paused") { !call().getBoolean("sync_running") }
-    for (page in listOf(0, 3)) {
+    for (page in listOf(3)) {
         call("page", "value" to page)
         Thread.sleep(350)
         if (page == 3) scrollSyncTo("Sync")
@@ -80,7 +80,7 @@ internal fun UiSuite.syncButtonChecks() {
     eventually("Synchronization disabled") { !call().getBoolean("sync_enabled") }
     call("page", "value" to 0)
     Thread.sleep(350)
-    check(elements().none { it.getString("label") in listOf("Sync", "Syncing…") }) {
+    check(elements().none { it.getString("label") in listOf("Sync", "Syncing…", "Start synchronization", "Pause synchronization") }) {
         "Disabled synchronization left a library button"
     }
     capture("sync-disabled-library")

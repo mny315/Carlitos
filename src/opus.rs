@@ -273,6 +273,20 @@ mod tests {
     }
 
     #[test]
+    fn forty_eight_short_frames_keep_duration_samples_and_seek() -> Result<()> {
+        let mut decoder = Decoder::open(Path::new("tests/fixtures/import-manyframes.opus"))?;
+        assert_eq!(decoder.duration, 240);
+        let pcm = decode(&mut decoder)?;
+        assert_eq!(pcm.len(), 240 * 48);
+        decoder.seek(120)?;
+        let tail = decode(&mut decoder)?;
+        assert_eq!(tail.len(), 120 * 48);
+        decoder.seek(0)?;
+        assert_eq!(decode(&mut decoder)?, pcm);
+        Ok(())
+    }
+
+    #[test]
     fn rejects_invalid_opus() -> Result<()> {
         let file = tempfile::NamedTempFile::new()?;
         std::fs::write(file.path(), b"OpusHead\x01\x01 invalid stream")?;

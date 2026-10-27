@@ -1,6 +1,7 @@
 import { State, BookItem } from "../state.slint";
 import { Theme } from "theme.slint";
 import { Action, Label, SeekBar, Cover, Meter } from "controls.slint";
+import { MarqueeLabel } from "marquee.slint";
 
 struct PlayerInfo {
     book: BookItem,
@@ -38,7 +39,7 @@ component BookIdentity inherits Rectangle {
             accessible-label: Theme.t("Обложка текущей книги: ", "Current book cover: ") + root.info.book.title;
         }
         VerticalLayout { spacing: 3px; alignment: center;
-            Label { text: root.info.active ? root.info.book.title : Theme.t("Выберите историю", "Choose a story"); font-weight: 600; }
+            MarqueeLabel { text: root.info.active ? root.info.book.title : Theme.t("Выберите историю", "Choose a story"); font-weight: 600; active: State.overlay == 0; }
             if !State.compact: Label { text: root.info.active ? root.info.part-title : Theme.t("Она ждёт в библиотеке", "Your library is waiting"); color: Theme.muted; font-size: (12px) * Theme.font-scale; }
         }
     }
@@ -163,9 +164,10 @@ export component MobileRateAction inherits Action {
 
 component MobileBookTitle inherits Rectangle {
     VerticalLayout { alignment: center; spacing: 2px;
-        Label {
+        MarqueeLabel {
             text: State.active ? State.current.title : Theme.t("Выберите историю", "Choose a story");
             font-weight: 600;
+            active: State.overlay == 0;
         }
         if State.active: Label { text: State.part-title; color: Theme.muted; font-size: (11px) * Theme.font-scale; }
     }

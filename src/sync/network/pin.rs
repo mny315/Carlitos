@@ -69,12 +69,20 @@ pub(super) fn pair(
             .filter(|a| valid_address(a))
             .take(8)
         {
+            {
+                let state = shared.lock().unwrap();
+                ensure!(
+                    !state.stopped && state.generation == generation,
+                    "Sync cancelled"
+                );
+            }
             if Instant::now() >= until {
                 break;
             }
             let Ok(stream) = TcpStream::connect_timeout(address, Duration::from_millis(500)) else {
                 continue;
             };
+            let _guard = ConnectionGuard::track(shared, &stream)?;
             // PAKE prevents a recorded exchange from revealing a four-digit PIN.
             // Noise confirms its session key before the QR secret is released.
             let mut channel = match Channel::pin_client(stream, pin, &hello, &snapshot) {

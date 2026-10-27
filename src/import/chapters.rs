@@ -23,9 +23,8 @@ pub(super) fn read(reader: &mut (impl Read + Seek), duration: Option<Millis>) ->
             read_chapter_track: !read_chapter_list,
             ..mp4ameta::ReadConfig::NONE
         };
-        // mp4ameta 0.13 can panic on malformed movie/chapter timescales instead
-        // of returning an error. Chapters are optional; keep the scan worker
-        // alive so it can report completion and continue with the next file.
+        // Chapters are optional. Retain a final guard against unexpected parser
+        // panics so one malformed file cannot strand the scan's completion.
         let Ok(Ok(tag)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             mp4ameta::Tag::read_with(reader, &config)
         })) else {

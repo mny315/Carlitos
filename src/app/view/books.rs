@@ -97,6 +97,8 @@ impl View {
             variant: (book.id % 4) as i32,
             started: progress.is_some(),
             completed,
+            sync_ready: self.sync_ready.contains(&book.id),
+            selected: self.selected_books.contains(&book.id),
             move_offset: 0.,
             move_offset_x: 0.,
         }
@@ -164,6 +166,10 @@ impl View {
             })
             .collect();
         self.books.reset(rows, &state, animate);
+        state.set_selected_book_count(self.selected_books.len() as i32);
+        state.set_all_books_selected(
+            self.books.row_count() > 0 && self.books.iter().all(|b| b.selected),
+        );
         if current_changed && !state.get_books_moving() {
             state.set_books_scroll_y(0.);
         }

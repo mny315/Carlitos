@@ -1,4 +1,6 @@
 mod pin;
+#[cfg(test)]
+mod shutdown_tests;
 
 use super::invitation::{Invitation, valid_address};
 use super::protocol::{self, Channel, Exchange, Hello};
@@ -10,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write,
-    net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream},
+    net::{Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, mpsc},
     thread::{self, JoinHandle},
@@ -171,6 +173,8 @@ struct Shared {
     activity: Option<Instant>,
     sync_request: u64,
     stopped: bool,
+    connections: BTreeMap<u64, TcpStream>,
+    next_connection: u64,
     dirty: bool,
     generation: u64,
     sequence: u64,
@@ -233,12 +237,45 @@ impl Shared {
     }
 }
 
+/// Hold a duplicate socket only while its worker can be blocked in I/O.
+struct ConnectionGuard {
+    shared: Arc<Mutex<Shared>>,
+    id: u64,
+}
+impl ConnectionGuard {
+    fn track(shared: &Arc<Mutex<Shared>>, stream: &TcpStream) -> Result<Self> {
+        let socket = stream.try_clone()?;
+        let mut state = shared.lock().unwrap();
+        ensure!(!state.stopped, "Sync cancelled");
+        let id = state.next_connection;
+        state.next_connection = state.next_connection.wrapping_add(1);
+        state.connections.insert(id, socket);
+        Ok(Self {
+            shared: shared.clone(),
+            id,
+        })
+    }
+}
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        self.shared.lock().unwrap().connections.remove(&self.id);
+    }
+}
+
 pub struct Network {
     shared: Arc<Mutex<Shared>>,
     requests: mpsc::Sender<Request>,
     thread: Option<JoinHandle<()>>,
 }
 impl Network {
+    #[cfg(test)]
+    pub(crate) fn without_discovery(
+        path: PathBuf,
+        id: String,
+        tx: mpsc::Sender<Command>,
+    ) -> Result<Self> {
+        Self::start_inner(path, id, tx, false)
+    }
     pub fn start(path: PathBuf, id: String, tx: mpsc::Sender<Command>) -> Result<Self> {
         Self::start_inner(path, id, tx, true)
     }
@@ -288,6 +325,8 @@ impl Network {
             activity: None,
             sync_request: 0,
             stopped: false,
+            connections: BTreeMap::new(),
+            next_connection: 0,
             dirty: true,
             generation: 0,
             sequence: 0,
@@ -550,7 +589,15 @@ impl Network {
 }
 impl Drop for Network {
     fn drop(&mut self) {
-        self.shared.lock().unwrap().stopped = true;
+        {
+            let mut state = self.shared.lock().unwrap();
+            state.stopped = true;
+            // Workers may be inside a handshake or a payload read. Closing
+            // their sockets wakes those calls before we join the workers.
+            for stream in state.connections.values() {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        }
         if let Some(thread) = self.thread.take() {
             thread.thread().unpark();
             let _ = thread.join();
@@ -660,13 +707,21 @@ fn connect(
     ));
     let until = Instant::now() + Duration::from_secs(6);
     for address in peer.addresses.iter().filter(|a| valid_address(a)).take(8) {
+        {
+            let state = shared.lock().unwrap();
+            ensure!(
+                !state.stopped && state.generation == generation,
+                "Sync cancelled"
+            );
+        }
         if Instant::now() >= until {
             break;
         }
         if let Ok(stream) = TcpStream::connect_timeout(address, Duration::from_millis(500)) {
+            let guard = ConnectionGuard::track(shared, &stream)?;
             match Channel::client(stream, &secret, &hello, &exchange) {
                 Ok(channel) => {
-                    connection = Some(channel);
+                    connection = Some((channel, guard));
                     // Prefer the last authenticated endpoint over VPN/stale addresses.
                     let address = *address;
                     peer.addresses.retain(|a| *a != address);
@@ -677,7 +732,7 @@ fn connect(
             }
         }
     }
-    let mut channel = connection.ok_or(last_error)?;
+    let (mut channel, _guard) = connection.ok_or(last_error)?;
     channel.send(&exchange)?;
     let received = channel.receive()?;
     let mut state = shared.lock().unwrap();
@@ -725,6 +780,7 @@ fn accept(
     shared: &Arc<Mutex<Shared>>,
     tx: &mpsc::Sender<Command>,
 ) -> Result<()> {
+    let _guard = ConnectionGuard::track(shared, &stream)?;
     let (hello, bytes) = protocol::read_hello(&mut stream)?;
     if hello.version == 2 {
         return pin::accept(stream, &hello, &bytes, shared);

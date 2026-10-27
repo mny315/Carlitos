@@ -1,4 +1,4 @@
-export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, move-offset: float, move-offset-x: float }
+export struct BookItem { key: string, title: string, author: string, detail: string, tags: string, progress: float, cover: image, initials: string, variant: int, started: bool, completed: bool, sync-ready: bool, selected: bool, move-offset: float, move-offset-x: float }
 export struct PartItem { key: string, title: string, detail: string, number: string, active: bool, chapter: bool }
 export struct ImportItem { title: string, author: string, detail: string, included: bool }
 export struct SourceItem { key: string, title: string, path: string, detail: string, selected: bool, expanded: bool, animating: bool, child: bool, book-key: string }
@@ -34,6 +34,9 @@ export global State {
     in-out property <string> query;
     in-out property <bool> search-open: false;
     in-out property <[BookItem]> books;
+    in-out property <bool> book-selection;
+    in-out property <int> selected-book-count;
+    in-out property <bool> all-books-selected;
     in-out property <int> book-columns: 1;
     in-out property <length> books-scroll-y;
     in-out property <bool> books-moving;
@@ -63,6 +66,7 @@ export global State {
     in-out property <bool> source-selection;
     in-out property <int> selected-source-count;
     in-out property <int> book-count;
+    in-out property <int> remove-book-count;
     in-out property <BookItem> selected;
     in-out property <BookItem> current;
     in-out property <image> backdrop-glow;
@@ -116,6 +120,7 @@ export global State {
     out property <string> import-folder-label: !android ? import-path : import-folder-name != "" ? import-folder-name : import-path != "" ? Theme.t("Выбранная папка", "Selected folder") : Theme.t("Выбрать папку", "Choose folder");
     in-out property <bool> single-book: false;
     in-out property <int> selected-draft: -1;
+    in-out property <string> draft-generation: "0";
     in-out property <string> draft-title;
     in-out property <string> draft-author;
     in-out property <int> theme-index: 2;
@@ -140,6 +145,7 @@ export global State {
     in-out property <string> remove-key;
     in-out property <string> remove-kind;
     in-out property <int> remove-source-count;
+    in-out property <bool> remove-book-files;
     in-out property <bool> book-menu: false;
     in-out property <BookItem> menu-book;
     in-out property <length> book-menu-x;
@@ -171,6 +177,7 @@ export global State {
         else { choose-file(); }
     }
     public function navigate(page: int) {
+        if (self.page == 0 && page != 0 && book-selection) { action("clear-book-selection", ""); }
         if (self.page == 4 && page != 4 && source-selection) { action("clear-source-selection", ""); }
         self.page = page; self.book-menu = false;
     }
@@ -179,6 +186,7 @@ export global State {
     public function mobile-back() -> bool {
         if (overlay != 0) { overlay = 0; return true; }
         if (book-menu) { book-menu = false; return true; }
+        if (page == 0 && book-selection) { action("clear-book-selection", ""); return true; }
         if (page == 4 && source-selection) { action("clear-source-selection", ""); return true; }
         if (page == 1 && reorder) { reorder = false; return true; }
         if (page == 2 && selected-draft >= 0) { selected-draft = -1; return true; }

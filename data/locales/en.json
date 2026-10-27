@@ -21,6 +21,7 @@
   "Папка пересекается с несколькими книгами. Импортируйте каждую книгу отдельно: {}": "This folder overlaps multiple books. Import each book separately: {}",
   "Повреждено сохранённое состояние": "Saved state is corrupt",
   "Путь не является UTF-8": "Path is not valid UTF-8",
+  "Путь выходит за пределы выбранной папки: {}": "Path leaves the selected folder: {}",
   "Размер файла отличается: {}. Перепривязка отменена.": "File size does not match: {}. Relocation cancelled.",
   "Список частей изменился; откройте книгу заново": "The list of parts has changed; reopen the book",
   "Скорость должна быть от 0,5× до 3×": "Speed must be between 0.5× and 3×",

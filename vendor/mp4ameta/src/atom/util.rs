@@ -50,6 +50,9 @@ pub trait ReadUtil: Read {
 
     /// Attempts to read a big endian utf-16 string from the reader.
     fn read_be_utf16(&mut self, len: u64) -> crate::Result<String> {
+        if !len.is_multiple_of(2) {
+            return Err(crate::Error::new(ErrorKind::Utf16StringDecoding, "odd utf-16 data length"));
+        }
         let data = self.read_u8_vec(len)?;
         let code_units = data.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]]));
         let mut ret = String::with_capacity(data.len() / 2);
@@ -59,6 +62,9 @@ pub trait ReadUtil: Read {
 
     /// Attempts to read a little endian utf-16 string from the reader.
     fn read_le_utf16(&mut self, len: u64) -> crate::Result<String> {
+        if !len.is_multiple_of(2) {
+            return Err(crate::Error::new(ErrorKind::Utf16StringDecoding, "odd utf-16 data length"));
+        }
         let data = self.read_u8_vec(len)?;
         let code_units = data.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]));
         let mut ret = String::with_capacity(data.len() / 2);
@@ -153,10 +159,16 @@ pub fn unknown_version<T>(name: &str, version: u8) -> crate::Result<T> {
 
 impl<T: Write> WriteUtil for T {}
 
-pub fn scale_duration(timescale: u32, duration: u64) -> Duration {
+pub fn scale_duration(timescale: u32, duration: u64) -> crate::Result<Duration> {
+    if timescale == 0 {
+        return Err(crate::Error::new(
+            crate::ErrorKind::InvalidTimescale,
+            "Duration timescale must be nonzero",
+        ));
+    }
     let secs = duration / timescale as u64;
     let nanos = (duration % timescale as u64) * 1_000_000_000 / timescale as u64;
-    Duration::new(secs, nanos as u32)
+    Ok(Duration::new(secs, nanos as u32))
 }
 
 pub fn unscale_duration(timescale: u32, duration: Duration) -> u64 {

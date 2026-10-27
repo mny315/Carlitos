@@ -5,6 +5,91 @@ use slint::{
     platform::{Key, WindowEvent},
 };
 
+pub(super) fn restoration_checks() {
+    use carlitos::library::{Book, Library, Source};
+    let library = Library {
+        sources: vec![
+            Source {
+                id: 1,
+                uri: "file:///snapshot-source/first".into(),
+            },
+            Source {
+                id: 2,
+                uri: "file:///snapshot-source/second".into(),
+            },
+        ],
+        books: vec![
+            Book {
+                id: 1,
+                source_id: 1,
+                title: "First".into(),
+                author: String::new(),
+                cover: None,
+            },
+            Book {
+                id: 2,
+                source_id: 2,
+                title: "Second".into(),
+                author: String::new(),
+                cover: None,
+            },
+        ],
+        folder_sources: std::collections::BTreeSet::from([1, 2]),
+        ..Default::default()
+    };
+    let window = AppWindow::new().expect("source selection window");
+    let (view, _covers) =
+        app::view::View::new(&window, std::sync::mpsc::channel().0, Default::default());
+    view.borrow_mut()
+        .event(app::Event::Library(Box::new(library.clone())));
+    let state = window.global::<State>();
+    state.invoke_action("select-source".into(), "1".into());
+    state.invoke_action("select-source".into(), "2".into());
+    check(
+        state.get_selected_source_count() == 2,
+        "source snapshot starts with two checked folders",
+    );
+
+    let restored = AppWindow::new().expect("restored source selection window");
+    let (target, _target_covers) =
+        app::view::View::new(&restored, std::sync::mpsc::channel().0, Default::default());
+    let mut changed = library.clone();
+    changed.sources.push(Source {
+        id: 3,
+        uri: "file:///snapshot-source/first/new".into(),
+    });
+    changed.books.push(Book {
+        id: 3,
+        source_id: 3,
+        title: "New".into(),
+        author: String::new(),
+        cover: None,
+    });
+    target
+        .borrow_mut()
+        .event(app::Event::Library(Box::new(changed)));
+    view.borrow()
+        .test_restore_source_selection(&mut target.borrow_mut());
+    let state = restored.global::<State>();
+    check(
+        state.get_selected_source_count() == 1
+            && state
+                .get_sources()
+                .iter()
+                .all(|row| row.selected == (row.key == "2")),
+        "restoring source selection never checks a newly discovered group member",
+    );
+    target
+        .borrow_mut()
+        .event(app::Event::Library(Box::new(library)));
+    view.borrow()
+        .test_restore_source_selection(&mut target.borrow_mut());
+    check(
+        state.get_selected_source_count() == 2,
+        "unchanged source groups restore their saved selection",
+    );
+}
+
 pub(super) fn selection_checks(
     window: &AppWindow,
     view: &std::rc::Weak<std::cell::RefCell<app::view::View>>,

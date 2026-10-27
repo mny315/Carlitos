@@ -205,13 +205,17 @@ pub extern "system" fn Java_io_github_mny315_carlitos_Bridge_event(
                     ended: flag("ended"),
                     barrier: flag("barrier"),
                     error: value["error"].as_str().map(str::to_owned),
+                    preserve_progress: false,
                 }));
             }
             "document" => {
                 let doc: super::documents::Document =
                     serde_json::from_value(value["document"].clone())?;
                 let name = doc.name.clone();
-                send(Command::OpenDocument(doc.media(name)?));
+                send(Command::OpenDocument(
+                    Box::new(doc.media(name)?),
+                    value["owner"].as_str().unwrap_or_default().into(),
+                ));
             }
             "picked" => send(Command::Picked(
                 value["kind"]
@@ -243,6 +247,7 @@ pub extern "system" fn Java_io_github_mny315_carlitos_Bridge_event(
                     .to_owned(),
             )),
             "service_stopped" => send(Command::AudioStopped),
+            "audio_absent" => send(Command::AudioAbsent(number("token"))),
             "audio_failed" => send(Command::AudioFailed(
                 number("token"),
                 value["message"]

@@ -1,11 +1,12 @@
 use super::*;
 use crate::sync::{Fingerprint, Index, RateRecord, Record};
 use rusqlite::TransactionBehavior;
+use std::collections::BTreeMap;
 
 pub(super) fn migrate(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    anyhow::ensure!(version <= 7, "Library schema changed during migration");
+    anyhow::ensure!(version <= 8, "Library schema changed during migration");
     if version >= 6 {
         return Ok(());
     }
@@ -38,8 +39,8 @@ pub(super) fn migrate(conn: &mut Connection) -> Result<()> {
 pub(super) fn migrate_rates(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    anyhow::ensure!(version <= 7, "Library schema changed during migration");
-    if version == 7 {
+    anyhow::ensure!(version <= 8, "Library schema changed during migration");
+    if version >= 7 {
         return Ok(());
     }
     anyhow::ensure!(version == 6, "Expected library schema 6");
@@ -156,6 +157,8 @@ impl Store {
     }
     pub fn sync_records(&self, library: &Library) -> Result<Vec<Record>> {
         let index = Index::new(library, &self.fingerprints()?);
+        let progress: std::collections::BTreeMap<_, _> =
+            library.progress.iter().map(|p| (p.book_id, p)).collect();
         let changes: Vec<(Id, i64, String, bool)> = self
             .conn
             .prepare("SELECT book_id,updated,device,reset FROM sync_changes")?
@@ -166,7 +169,7 @@ impl Store {
             let Some(book) = index.books.get(&id) else {
                 continue;
             };
-            let progress = library.progress.iter().find(|p| p.book_id == id);
+            let progress = progress.get(&id);
             let part = if reset {
                 book.parts.first()
             } else {
@@ -216,8 +219,9 @@ fn apply_sync_rates(conn: &Connection, index: &Index, rates: &[RateRecord]) -> R
         rate.validate()?;
     }
     let mut changed = Vec::new();
+    let books = index.books_by_key();
     for rate in rates {
-        for (&id, _) in index.books.iter().filter(|(_, book)| book.key == rate.book) {
+        for &id in books.get(rate.book.as_str()).into_iter().flatten() {
             if conn.execute("INSERT INTO book_rates VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET value=excluded.value,updated=excluded.updated,device=excluded.device WHERE (excluded.updated,excluded.device)>(book_rates.updated,book_rates.device)", params![id, rate.value, rate.updated, rate.device])? > 0 {
                 changed.push(id);
             }
@@ -239,10 +243,15 @@ fn apply_sync_records(
     for record in records {
         record.validate()?;
     }
+    let books = index.books_by_key();
+    let parts: BTreeMap<_, _> = library.parts.iter().map(|p| (p.id, p)).collect();
+    let media: BTreeMap<_, _> = library.media.iter().map(|m| (m.id, m)).collect();
     let mut library = library.clone();
     let mut changed = Vec::new();
+    let mut progress_updates = BTreeMap::new();
     for record in records {
-        for (&id, book) in index.books.iter().filter(|(_, b)| b.key == record.book) {
+        for &id in books.get(record.book.as_str()).into_iter().flatten() {
+            let book = &index.books[&id];
             let previous: Option<(i64, String)> = tx
                 .query_row(
                     "SELECT updated,device FROM sync_changes WHERE book_id=?1",
@@ -261,15 +270,16 @@ fn apply_sync_records(
             }) else {
                 continue;
             };
-            let duration = library
-                .file_for(&Target::Book(*part))
+            let duration = parts
+                .get(part)
+                .and_then(|p| media.get(&p.file_id))
                 .and_then(|m| m.duration);
             // Metadata durations can differ slightly between platform decoders.
             if duration.is_some_and(|d| record.position > d.saturating_add(2_000)) {
                 continue;
             }
             let active = library.session.current.as_ref().and_then(|t| match t {
-                Target::Book(p) => library.part(*p).map(|p| p.book_id),
+                Target::Book(p) => parts.get(p).map(|p| p.book_id),
             }) == Some(id);
             if record.reset {
                 tx.execute("DELETE FROM book_progress WHERE book_id=?1", [id])?;
@@ -287,19 +297,28 @@ fn apply_sync_records(
             }
             tx.execute("INSERT INTO sync_changes VALUES(?1,?2,?3,?4) ON CONFLICT(book_id) DO UPDATE SET updated=excluded.updated,device=excluded.device,reset=excluded.reset",
                     params![id, record.updated, record.device, record.reset])?;
-            library.progress.retain(|p| p.book_id != id);
-            if !record.reset {
-                library.progress.push(Progress {
-                    book_id: id,
-                    part_id: *part,
-                    position: record.position,
-                    completed: record.completed,
-                    updated: record.updated,
-                });
-            }
+            let progress = (!record.reset).then_some(Progress {
+                book_id: id,
+                part_id: *part,
+                position: record.position,
+                completed: record.completed,
+                updated: record.updated,
+            });
+            // Keep the last accepted update per book, in its original arrival
+            // order. Rebuilding once avoids scanning all progress per record.
+            progress_updates.insert(id, (changed.len(), progress));
             changed.push(id);
         }
     }
+    library
+        .progress
+        .retain(|p| !progress_updates.contains_key(&p.book_id));
+    let mut updated: Vec<_> = progress_updates
+        .into_values()
+        .filter_map(|(order, progress)| progress.map(|p| (order, p)))
+        .collect();
+    updated.sort_by_key(|(order, _)| *order);
+    library.progress.extend(updated.into_iter().map(|(_, p)| p));
     save_session(tx, &library.session)?;
     Ok((library, changed))
 }

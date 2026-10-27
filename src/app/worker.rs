@@ -1,7 +1,5 @@
-#[cfg(target_os = "android")]
-use super::Command;
 use super::audio::{Audio, Playback};
-use super::{Controller, Event, Handle, Options, demo_library, text};
+use super::{Command, Controller, Event, Handle, Options, demo_library, text};
 use crate::{
     import::ScanControl,
     library::{Library, Target},
@@ -125,14 +123,40 @@ impl Handle {
                         app.notice(format!("{e:#}"));
                     }
                 }
+                let mut background_error = None;
                 while let Ok(command) = rx.recv() {
-                    match app.handle(command) {
+                    let background = matches!(
+                        command,
+                        Command::Playback(_)
+                            | Command::AudioFailed(..)
+                            | Command::AudioAbsent(_)
+                            | Command::AudioStopped
+                    );
+                    let checkpoint = app.checkpoint;
+                    let result = app.handle(command);
+                    if app.checkpoint != checkpoint {
+                        background_error = None;
+                    }
+                    match result {
                         Ok(true) => break,
                         Ok(false) => {}
                         Err(e) => {
+                            let message = format!("{e:#}");
+                            // Repeated audio snapshots retry a failed write.
+                            // Report once until a checkpoint succeeds, so a full
+                            // disk cannot keep raising a window the user hid.
+                            // Explicit actions, including Quit, still report.
+                            let report = !background
+                                || app.quitting
+                                || background_error.as_ref() != Some(&message);
                             app.quitting = false;
-                            let _ = app.events.try_send(Event::Show);
-                            app.notice(format!("{e:#}"));
+                            if report {
+                                let _ = app.events.try_send(Event::Show);
+                                app.notice(message.clone());
+                            }
+                            if background {
+                                background_error = Some(message);
+                            }
                         }
                     }
                 }
@@ -163,6 +187,11 @@ impl Handle {
     }
 }
 impl Controller {
+    pub(super) fn reap_workers(&mut self) {
+        // Completed cover/hash jobs must not retain OS thread handles until
+        // the next import, especially across a long desktop session.
+        self.scans.retain(|worker| !worker.is_finished());
+    }
     pub(super) fn finish(&mut self) -> Result<()> {
         // An unreadable database is never replaced by the empty fallback view.
         if self.store.as_ref().is_some_and(|store| store.is_ok()) {

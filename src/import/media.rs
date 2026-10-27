@@ -37,6 +37,7 @@ pub(super) fn read_media(path: &Path, root: &Path, discoverer: &Discoverer) -> R
     media.identity = identity(path)?;
     media.size = Some(metadata.len());
     media.modified = Some(crate::platform::modified(&metadata));
+    media.modified_subsec_nanos = crate::platform::modified_subsec_nanos(&metadata);
     Ok(media)
 }
 
@@ -119,6 +120,7 @@ pub(super) fn read_media(path: &Path, root: &Path, discoverer: &Discoverer) -> R
         identity: identity(path)?,
         size: Some(metadata.len()),
         modified: Some(crate::platform::modified(&metadata)),
+        modified_subsec_nanos: crate::platform::modified_subsec_nanos(&metadata),
         duration,
         title,
         artist: tag!(gst::tags::Artist).unwrap_or_default(),

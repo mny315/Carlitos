@@ -1,9 +1,11 @@
 mod books;
+mod editor;
 mod exercise;
 mod imports;
 mod parts;
 mod scenarios;
 mod self_test;
+mod shortcuts;
 mod sliders;
 mod sources;
 mod sync;
@@ -126,3 +128,4 @@ fn motion_snapshot(window: &AppWindow, name: &'static str) {
         }
     });
 }
+mod book_selection;

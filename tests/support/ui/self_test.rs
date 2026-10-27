@@ -58,11 +58,11 @@ fn step(
         move || {
             let Some(w) = weak.upgrade() else { return };
             match index {
-                0..=13 => controls::step(w, &parts, &view, index),
-                14..=32 => library::step(w, &view, index - 14),
+                0..=15 => controls::step(w, &parts, &view, index),
+                16..=34 => library::step(w, &view, index - 16),
                 _ => return,
             }
-            if index < 32 {
+            if index < 34 {
                 step(weak, parts, view, index + 1);
             }
         },

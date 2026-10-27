@@ -77,6 +77,7 @@ impl Store {
                     if refreshed.chapters.is_empty()
                         && file.size.is_some()
                         && file.modified.is_some()
+                        && previous.modified_subsec_nanos == file.modified_subsec_nanos
                         && (size, modified, identity.as_str())
                             == (
                                 super::stored_size(file.size)?,

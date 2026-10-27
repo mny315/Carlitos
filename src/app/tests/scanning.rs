@@ -2,6 +2,227 @@ use super::*;
 use crate::import::ScanResult;
 
 #[test]
+fn queued_preview_commands_cannot_modify_or_import_a_new_scans_preview() -> Result<()> {
+    for action in ["edit", "file", "import"] {
+        let temp = tempfile::tempdir()?;
+        let (mut app, commands) = controller(temp.path())?;
+        app.drafts = vec![Draft {
+            root_uri: app.library.sources[0].uri.clone(),
+            title: "Old preview".into(),
+            author: String::new(),
+            files: app.library.media.clone(),
+            include: true,
+        }];
+        let queued = match action {
+            "edit" => Command::DraftEdit(
+                app.scan_generation,
+                0,
+                "Old edited title".into(),
+                "Old author".into(),
+                false,
+            ),
+            "file" => Command::DraftFile(
+                app.scan_generation,
+                0,
+                app.library.media[0].uri.clone(),
+                "remove".into(),
+            ),
+            "import" => Command::Import(app.scan_generation, "old owner".into()),
+            _ => unreachable!(),
+        };
+        // A rescan can finish before the controller receives an event from
+        // the old preview, including when rescanning the very same directory.
+        app.handle(Command::Scan(
+            temp.path().join("Книга с пробелами").into(),
+            true,
+        ))?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.drafts.is_empty() {
+            app.handle(commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?)?;
+        }
+        let expected = app.drafts[0].clone();
+        app.handle(queued)?;
+        assert_eq!(
+            app.drafts.len(),
+            1,
+            "stale {action} must keep the new preview"
+        );
+        let current = &app.drafts[0];
+        assert_eq!(
+            current.title, expected.title,
+            "stale {action} changed title"
+        );
+        assert_eq!(current.author, expected.author);
+        assert_eq!(current.include, expected.include);
+        assert_eq!(
+            current.files.iter().map(|m| &m.uri).collect::<Vec<_>>(),
+            expected.files.iter().map(|m| &m.uri).collect::<Vec<_>>()
+        );
+        // The same action from the current preview must remain usable.
+        match action {
+            "edit" => {
+                app.handle(Command::DraftEdit(
+                    app.scan_generation,
+                    0,
+                    "Current title".into(),
+                    "Current author".into(),
+                    false,
+                ))?;
+                assert_eq!(app.drafts[0].title, "Current title");
+                assert!(!app.drafts[0].include);
+            }
+            "file" => {
+                app.handle(Command::DraftFile(
+                    app.scan_generation,
+                    0,
+                    expected.files[0].uri.clone(),
+                    "remove".into(),
+                ))?;
+                assert_eq!(app.drafts[0].files.len(), expected.files.len() - 1);
+            }
+            "import" => {
+                let generation = app.scan_generation;
+                let (events, received) = async_channel::unbounded();
+                app.events = events;
+                app.handle(Command::Import(generation, "current owner".into()))?;
+                assert!(app.drafts.is_empty());
+                assert!(std::iter::from_fn(|| received.try_recv().ok()).any(
+                    |event| matches!(event, Event::Imported(saved, owner) if saved == generation && owner == "current owner")
+                ));
+            }
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn a_source_refresh_keeps_controls_busy_until_its_completion_is_published() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, _commands) = controller(temp.path())?;
+    let source = app.library.sources[0].id;
+    app.scan_source = Some(source);
+    let (events, received) = async_channel::unbounded();
+    app.events = events;
+    app.handle(Command::ScanDone(
+        app.scan_generation,
+        Ok(ScanResult {
+            drafts: vec![Draft {
+                root_uri: app.library.sources[0].uri.clone(),
+                title: app.library.books[0].title.clone(),
+                author: app.library.books[0].author.clone(),
+                files: app.library.media.clone(),
+                include: true,
+            }],
+            folders: vec![],
+            issues: vec![],
+        }),
+    ))?;
+    let events: Vec<_> = std::iter::from_fn(|| received.try_recv().ok()).collect();
+    let completed = events
+        .iter()
+        .position(|event| matches!(event, Event::SourceUpdated(id, _) if *id == source))
+        .expect("source completion");
+    let idle = events
+        .iter()
+        .position(|event| matches!(event, Event::SourceUpdating(false)))
+        .expect("source controls released");
+    assert!(
+        completed < idle,
+        "releasing source controls first lets an old completion close a newly opened editor"
+    );
+    Ok(())
+}
+
+#[test]
+fn source_refresh_failures_release_controls_without_publishing_success() -> Result<()> {
+    for failure in ["scan", "checkpoint", "import"] {
+        let temp = tempfile::tempdir()?;
+        let (mut app, _commands) = controller(temp.path())?;
+        let source = app.library.sources[0].id;
+        app.scan_source = Some(source);
+        let (events, received) = async_channel::unbounded();
+        app.events = events;
+        let result = if failure == "scan" {
+            Err(anyhow::anyhow!("test scan failure"))
+        } else {
+            let trigger = if failure == "checkpoint" {
+                "CREATE TRIGGER fail_checkpoint BEFORE INSERT ON session_state BEGIN SELECT RAISE(ABORT, 'test checkpoint failure'); END;"
+            } else {
+                "CREATE TRIGGER fail_import BEFORE UPDATE ON media_files BEGIN SELECT RAISE(ABORT, 'test import failure'); END;"
+            };
+            rusqlite::Connection::open(temp.path().join("db"))?.execute_batch(trigger)?;
+            Ok(ScanResult {
+                drafts: vec![Draft {
+                    root_uri: app.library.sources[0].uri.clone(),
+                    title: app.library.books[0].title.clone(),
+                    author: app.library.books[0].author.clone(),
+                    files: app.library.media.clone(),
+                    include: true,
+                }],
+                folders: vec![],
+                issues: vec![],
+            })
+        };
+        assert!(
+            app.handle(Command::ScanDone(app.scan_generation, result))
+                .is_err()
+        );
+        assert!(app.scan_source.is_none());
+        let events: Vec<_> = std::iter::from_fn(|| received.try_recv().ok()).collect();
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, Event::SourceUpdating(false))),
+            "{failure}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, Event::Scanning(false, _))),
+            "{failure}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, Event::SourceUpdated(..))),
+            "{failure}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn relocation_keeps_source_controls_busy_through_its_followup_refresh() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, _commands) = controller(temp.path())?;
+    let source = app.library.sources[0].id;
+    app.maintenance = true;
+    let (events, received) = async_channel::unbounded();
+    app.events = events;
+    app.handle(Command::Relocated(source, Ok(())))?;
+    let followup = app.scan_source;
+    let events: Vec<_> = std::iter::from_fn(|| received.try_recv().ok()).collect();
+    app.scan_control.cancel();
+    for worker in app.scans.drain(..) {
+        worker.join().expect("source refresh worker");
+    }
+    assert_eq!(followup, Some(source));
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, Event::SourceUpdating(true)))
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, Event::SourceUpdating(false))),
+        "the editor must not reopen between relocation and its refresh"
+    );
+    Ok(())
+}
+
+#[test]
 fn background_completions_clear_busy_flags_while_waiting_to_quit() -> Result<()> {
     for quitting in [true, false] {
         let temp = tempfile::tempdir()?;
@@ -87,11 +308,21 @@ fn queued_preview_moves_keep_targeting_the_selected_file() -> Result<()> {
         include: true,
     }];
     for _ in 0..2 {
-        app.handle(Command::DraftFile(0, selected.clone(), "up".into()))?;
+        app.handle(Command::DraftFile(
+            app.scan_generation,
+            0,
+            selected.clone(),
+            "up".into(),
+        ))?;
     }
     assert_eq!(app.drafts[0].files[0].uri, selected);
     for _ in 0..2 {
-        app.handle(Command::DraftFile(0, selected.clone(), "remove".into()))?;
+        app.handle(Command::DraftFile(
+            app.scan_generation,
+            0,
+            selected.clone(),
+            "remove".into(),
+        ))?;
     }
     assert_eq!(app.drafts[0].files.len(), 2);
     assert!(app.drafts[0].files.iter().all(|file| file.uri != selected));
@@ -157,8 +388,8 @@ fn source_refresh_and_relocation_keep_combined_books_and_listening_state() -> Re
     wait(&app, |e| matches!(e, Event::Library(_)))?;
     app.tx.send(Command::Rescan(source))?;
     wait(&app, |e| {
-        assert!(!matches!(e, Event::Imported));
-        if let Event::Drafts(drafts, _) = e {
+        assert!(!matches!(e, Event::Imported(..)));
+        if let Event::Drafts(_, drafts, _) = e {
             assert!(drafts.is_empty());
         }
         matches!(e, Event::SourceUpdated(id, _) if *id == source)
@@ -262,5 +493,79 @@ fn relocation_cancellation_keeps_source_and_progress() -> Result<()> {
     let after = store.load()?;
     assert_eq!(after.sources[0].uri, original.sources[0].uri);
     assert_eq!(after.parts.len(), original.parts.len());
+    Ok(())
+}
+
+#[test]
+fn a_same_second_rescan_invalidates_the_previous_content_fingerprint() -> Result<()> {
+    use crate::sync::Fingerprint;
+    use std::io::{Seek, SeekFrom, Write};
+    use std::sync::atomic::AtomicBool;
+    let temp = tempfile::tempdir()?;
+    let library = fixture(temp.path())?;
+    let media = &library.media[0];
+    let original = Fingerprint::read(media, &AtomicBool::new(false))?;
+    let mut store = Store::open(&temp.path().join("db"))?;
+    store.save_fingerprints(&library, std::slice::from_ref(&original))?;
+    let path = local_path(&media.uri).unwrap();
+    let modified = std::fs::metadata(&path)?
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)?;
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)?;
+    file.seek(SeekFrom::Start(44))?;
+    file.write_all(&1234i16.to_le_bytes())?;
+    let changed = std::time::UNIX_EPOCH
+        + Duration::new(
+            modified.as_secs(),
+            (modified.subsec_nanos() + 10_000_000) % 1_000_000_000,
+        );
+    file.set_times(std::fs::FileTimes::new().set_modified(changed))?;
+    drop(file);
+    assert_eq!(
+        Some(crate::platform::modified(&std::fs::metadata(&path)?)),
+        media.modified
+    );
+    let scan = import::scan(
+        vec![path.parent().unwrap().to_path_buf()],
+        ImportMode::Book,
+        ScanControl::default(),
+    )?;
+    let refreshed = store.import(scan.drafts)?;
+    let current = refreshed.media(media.id).unwrap();
+    assert!(
+        !original.matches(current),
+        "a same-size edit within one second must invalidate the cached hash"
+    );
+    let fingerprint = Fingerprint::read(current, &AtomicBool::new(false))?;
+    assert_ne!(fingerprint.hash, original.hash);
+    let destination = temp.path().join("relocated-copy");
+    std::fs::create_dir(&destination)?;
+    for media in &refreshed.media {
+        let source = local_path(&media.uri).unwrap();
+        let target = destination.join(source.file_name().unwrap());
+        std::fs::copy(&source, &target)?;
+        let modified = std::fs::metadata(&source)?
+            .modified()?
+            .duration_since(std::time::UNIX_EPOCH)?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&target)?
+            .set_times(std::fs::FileTimes::new().set_modified(
+                std::time::UNIX_EPOCH
+                    + Duration::new(
+                        modified.as_secs(),
+                        (modified.subsec_nanos() + 20_000_000) % 1_000_000_000,
+                    ),
+            ))?;
+    }
+    let relocated = store.relocate(refreshed.books[0].source_id, &destination)?;
+    let moved = relocated.media(media.id).unwrap();
+    assert_eq!(
+        Fingerprint::read(moved, &AtomicBool::new(false))?.hash,
+        fingerprint.hash
+    );
     Ok(())
 }

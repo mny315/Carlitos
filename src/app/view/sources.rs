@@ -3,7 +3,7 @@ use crate::library::{Id, Library, file_uri, local_path, natural_cmp};
 use crate::source::Location;
 use crate::{SourceItem, State, app::Command};
 use slint::{ComponentHandle, Model};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub(super) struct SourceGroup {
     key: String,
@@ -33,27 +33,49 @@ fn groups(library: &Library) -> Vec<SourceGroup> {
         .collect();
     let book_sources: BTreeSet<_> = library.books.iter().map(|book| book.source_id).collect();
     let owns_book = |id| book_sources.contains(&id);
+    let by_source: HashMap<_, _> = library.sources.iter().map(|s| (s.id, s)).collect();
+    let mut roots = BTreeMap::<_, Vec<_>>::new();
+    let mut collections = HashMap::<_, Vec<_>>::new();
+    for source in &library.sources {
+        if let Some(path) = paths.get(&source.id) {
+            roots.entry(path.as_path()).or_default().push(source);
+        }
+        if !owns_book(source.id) {
+            for book in books.get(&source.id).into_iter().flatten() {
+                collections.entry(*book).or_default().push(source);
+            }
+        }
+    }
     let mut grouped = BTreeMap::<Id, Vec<Id>>::new();
     for source in &library.sources {
-        let parent = library
-            .sources
-            .iter()
-            .filter(|candidate| {
-                if candidate.id == source.id {
-                    return true;
+        let mut candidates = vec![source];
+        // Local parents must be actual path ancestors. For opaque provider IDs,
+        // a containing collection must include any one of the child's books.
+        // These indexes avoid comparing every source with every other source.
+        if let Some(path) = paths.get(&source.id) {
+            for ancestor in path.ancestors() {
+                if let Some(parents) = roots.get(ancestor) {
+                    candidates.extend(parents.iter().copied());
                 }
-                if let (Some(root), Some(child)) = (paths.get(&candidate.id), paths.get(&source.id))
+            }
+        }
+        if let Some(children) = books.get(&source.id)
+            && let Some(first) = children.iter().next()
+        {
+            for &candidate in collections.get(first).into_iter().flatten() {
+                if paths.contains_key(&source.id) && paths.contains_key(&candidate.id) {
+                    continue;
+                }
+                if books
+                    .get(&candidate.id)
+                    .is_some_and(|parent| children.is_subset(parent))
                 {
-                    return child.starts_with(root);
+                    candidates.push(candidate);
                 }
-                !owns_book(candidate.id)
-                    && books.get(&source.id).is_some_and(|children| {
-                        !children.is_empty()
-                            && books
-                                .get(&candidate.id)
-                                .is_some_and(|parent| children.is_subset(parent))
-                    })
-            })
+            }
+        }
+        let parent = candidates
+            .into_iter()
             .max_by_key(|candidate| {
                 (
                     books.get(&candidate.id).map_or(0, |books| books.len()),
@@ -72,11 +94,7 @@ fn groups(library: &Library) -> Vec<SourceGroup> {
     }
     let mut result = Vec::new();
     for (id, members) in grouped {
-        let source = library
-            .sources
-            .iter()
-            .find(|source| source.id == id)
-            .unwrap();
+        let source = by_source[&id];
         result.push(SourceGroup {
             key: id.to_string(),
             uri: source.uri.clone(),
@@ -138,6 +156,7 @@ fn groups(library: &Library) -> Vec<SourceGroup> {
             });
         }
     }
+    let by_book: HashMap<_, _> = library.books.iter().map(|book| (book.id, book)).collect();
     for group in &mut result {
         let ids: BTreeSet<_> = group
             .members
@@ -146,10 +165,9 @@ fn groups(library: &Library) -> Vec<SourceGroup> {
             .flatten()
             .copied()
             .collect();
-        let mut members: Vec<_> = library
-            .books
+        let mut members: Vec<_> = ids
             .iter()
-            .filter(|book| ids.contains(&book.id))
+            .filter_map(|id| by_book.get(id).copied())
             .collect();
         members.sort_by(|a, b| natural_cmp(&a.title, &b.title).then(a.id.cmp(&b.id)));
         group.books = members.into_iter().map(|book| book.id).collect();
@@ -164,21 +182,56 @@ fn groups(library: &Library) -> Vec<SourceGroup> {
 }
 
 impl View {
+    #[cfg(all(debug_assertions, target_os = "linux"))]
+    pub fn test_restore_source_selection(&self, target: &mut Self) {
+        target.restore_source_selection(self.save_source_selection());
+    }
+
+    #[cfg(any(target_os = "android", all(debug_assertions, target_os = "linux")))]
+    pub(crate) fn save_source_selection(&self) -> BTreeSet<Id> {
+        self.selected_sources.clone()
+    }
+
+    #[cfg(any(target_os = "android", all(debug_assertions, target_os = "linux")))]
+    pub(crate) fn restore_source_selection(&mut self, saved: BTreeSet<Id>) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        self.selected_sources = saved;
+        window
+            .global::<State>()
+            .set_source_selection(!self.library.sources.is_empty());
+        // Revalidate the exact saved IDs against complete current groups.
+        // Restoring a checked row key would also select newly added members.
+        self.refresh_sources();
+    }
+
     pub(super) fn refresh_sources(&mut self) {
         let Some(window) = self.window.upgrade() else {
             return;
         };
         let state = window.global::<State>();
         let had_selection = !self.selected_sources.is_empty();
-        self.selected_sources
-            .retain(|id| self.library.sources.iter().any(|s| s.id == *id));
+        let sources: BTreeSet<_> = self.library.sources.iter().map(|s| s.id).collect();
+        self.selected_sources.retain(|id| sources.contains(id));
         self.source_groups = groups(&self.library);
         self.selected_sources =
             selected_sources_for_removal(&self.source_groups, &self.selected_sources)
                 .into_iter()
                 .collect();
+        let uris: BTreeSet<_> = self
+            .source_groups
+            .iter()
+            .map(|group| group.uri.as_str())
+            .collect();
         self.expanded_sources
-            .retain(|uri| self.source_groups.iter().any(|group| &group.uri == uri));
+            .retain(|uri| uris.contains(uri.as_str()));
+        let books: HashMap<_, _> = self
+            .library
+            .books
+            .iter()
+            .map(|book| (book.id, book))
+            .collect();
         let mut rows = Vec::new();
         let mut selected = 0;
         for group in &self.source_groups {
@@ -210,7 +263,7 @@ impl View {
                 && !state.get_source_selection()
             {
                 for id in &group.books {
-                    if let Some(book) = self.library.books.iter().find(|book| book.id == *id) {
+                    if let Some(book) = books.get(id) {
                         rows.push(SourceItem {
                             key: format!("{}:{id}", group.key).into(),
                             title: book.title.clone().into(),
@@ -392,6 +445,114 @@ impl View {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn large_local_and_document_collections_keep_all_members_under_their_root() {
+        use crate::library::{Book, Part, Source};
+        const COUNT: Id = 2_000;
+        for documents in [false, true] {
+            let mut library = Library::default();
+            let root = if cfg!(windows) {
+                "file:///C:/audit-collection"
+            } else {
+                "file:///audit-collection"
+            };
+            let uri = |id| {
+                if documents {
+                    format!("content://provider/tree/opaque/document/{id}")
+                } else if id == COUNT + 1 {
+                    root.into()
+                } else {
+                    format!("{root}/{id}")
+                }
+            };
+            for id in 1..=COUNT {
+                library.sources.push(Source { id, uri: uri(id) });
+                library.books.push(Book {
+                    id,
+                    source_id: id,
+                    title: format!("Book {id}"),
+                    author: String::new(),
+                    cover: None,
+                });
+                library.parts.push(Part {
+                    id,
+                    book_id: id,
+                    file_id: id,
+                    title: String::new(),
+                    ordinal: 0,
+                });
+                library.source_files.push((COUNT + 1, id));
+            }
+            library.sources.push(Source {
+                id: COUNT + 1,
+                uri: uri(COUNT + 1),
+            });
+            library.folder_sources.insert(COUNT + 1);
+            let started = std::time::Instant::now();
+            let grouped = groups(&library);
+            println!(
+                "Grouping {COUNT} sources (documents={documents}): {:?}",
+                started.elapsed()
+            );
+            assert_eq!(grouped.len(), 1);
+            assert_eq!(grouped[0].key, (COUNT + 1).to_string());
+            assert_eq!(grouped[0].members, (1..=COUNT + 1).collect::<Vec<_>>());
+            assert_eq!(grouped[0].books, (1..=COUNT).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn shared_books_do_not_merge_unrelated_local_paths_but_identify_opaque_collections() {
+        use crate::library::{Book, Part, Source};
+        let prefix = if cfg!(windows) {
+            "file:///C:"
+        } else {
+            "file://"
+        };
+        let mut library = Library {
+            sources: vec![
+                Source {
+                    id: 1,
+                    uri: format!("{prefix}/independent/one"),
+                },
+                Source {
+                    id: 2,
+                    uri: format!("{prefix}/independent/two"),
+                },
+            ],
+            books: vec![Book {
+                id: 1,
+                source_id: 1,
+                title: "Book".into(),
+                author: String::new(),
+                cover: None,
+            }],
+            parts: vec![Part {
+                id: 1,
+                book_id: 1,
+                file_id: 1,
+                title: String::new(),
+                ordinal: 0,
+            }],
+            source_files: vec![(2, 1)],
+            folder_sources: BTreeSet::from([2]),
+            ..Default::default()
+        };
+        let local = groups(&library);
+        assert_eq!(local.len(), 2);
+        assert!(
+            local
+                .iter()
+                .all(|group| group.members.len() == 1 && group.books == [1])
+        );
+        library.sources[1].uri = "content://provider/tree/opaque/document/collection".into();
+        let opaque = groups(&library);
+        assert_eq!(opaque.len(), 1);
+        assert_eq!(opaque[0].key, "2");
+        assert_eq!(opaque[0].members, [1, 2]);
+        assert_eq!(opaque[0].books, [1]);
+    }
 
     #[test]
     fn refreshed_groups_cannot_delete_members_of_an_unchecked_folder() {

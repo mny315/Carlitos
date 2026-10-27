@@ -23,6 +23,8 @@ pub enum ErrorKind {
     AtomSizeOutOfBounds,
     /// The sample table atom (`stbl`) contains inconsistent data.
     InvalidSampleTable,
+    /// A duration cannot be scaled because its timescale is zero.
+    InvalidTimescale,
     /// The [`ChannelConfig`] code is unknown. Contains the unknown code.
     ///
     /// [`ChannelConfig`]: crate::ChannelConfig

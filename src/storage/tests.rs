@@ -4,6 +4,8 @@ mod migrations;
 mod path_migration;
 mod progress;
 mod sources;
+mod stable_ids;
+mod sync;
 
 use super::*;
 

@@ -12,7 +12,7 @@ struct Mailbox {
     library: Option<Box<Library>>,
     playback: Option<crate::app::audio::Playback>,
     settings: Option<Settings>,
-    drafts: Option<(Vec<crate::storage::Draft>, Vec<String>)>,
+    drafts: Option<(u64, Vec<crate::storage::Draft>, Vec<String>)>,
     drafts_dirty: bool,
     library_dirty: bool,
     playback_dirty: bool,
@@ -24,6 +24,7 @@ struct Mailbox {
     status_dirty: bool,
     sync: crate::sync::Status,
     sync_indexing: bool,
+    sync_ready: Vec<crate::library::Id>,
     pending: PendingEvents,
     subscriber: Option<async_channel::Sender<Event>>,
 }
@@ -80,8 +81,8 @@ pub fn initialize(options: Options) -> Result<()> {
                         cache.settings = Some(settings);
                         cache.settings_dirty = true;
                     }
-                    Event::Drafts(drafts, issues) => {
-                        cache.drafts = Some((drafts, issues));
+                    Event::Drafts(generation, drafts, issues) => {
+                        cache.drafts = Some((generation, drafts, issues));
                         cache.drafts_dirty = true;
                     }
                     event => {
@@ -90,6 +91,7 @@ pub fn initialize(options: Options) -> Result<()> {
                         match &event {
                             Event::SyncStatus(status) => cache.sync = status.clone(),
                             Event::SyncIndexing(active) => cache.sync_indexing = *active,
+                            Event::SyncReady(books) => cache.sync_ready = books.clone(),
                             Event::Scanning(active, message) => {
                                 cache.scanning = (*active, message.clone());
                             }
@@ -168,13 +170,14 @@ pub fn take_events() -> UiEvents {
         events.push(Event::Volume(library.session.volume, library.session.muted));
     }
     if std::mem::take(&mut cache.drafts_dirty)
-        && let Some((drafts, issues)) = &cache.drafts
+        && let Some((generation, drafts, issues)) = &cache.drafts
     {
-        events.push(Event::Drafts(drafts.clone(), issues.clone()));
+        events.push(Event::Drafts(*generation, drafts.clone(), issues.clone()));
     }
     if std::mem::take(&mut cache.status_dirty) {
         events.push(Event::SyncStatus(cache.sync.clone()));
         events.push(Event::SyncIndexing(cache.sync_indexing));
+        events.push(Event::SyncReady(cache.sync_ready.clone()));
         events.push(Event::Scanning(cache.scanning.0, cache.scanning.1.clone()));
         events.push(Event::SourceUpdating(cache.source_updating));
         events.push(Event::Hidden(cache.hidden));

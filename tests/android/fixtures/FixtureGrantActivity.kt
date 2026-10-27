@@ -20,6 +20,15 @@ class FixtureGrantActivity : Activity() {
             else listOf("root", "duplicates", "s4:old", "s4:moved", "s4:bad", "s4:bulk")
         val slices = if (ui) listOf("slice-wav") else listOf("slice-mp3", "slice-m4b")
         documents.forEach { grantUriPermission(target, DocumentsContract.buildDocumentUri(authority, it), flags) }
+        if (ui) {
+            grantUriPermission(target, DocumentsContract.buildTreeDocumentUri(authority, "delete-root"),
+                flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            for (id in listOf("delete-audio", "delete-readonly", "delete-error")) {
+                java.io.File(cacheDir, "$id.deleted").delete()
+                grantUriPermission(target, DocumentsContract.buildDocumentUri(authority, id),
+                    flags or if (id == "delete-readonly") 0 else Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+        }
         trees.forEach { grantUriPermission(target, DocumentsContract.buildTreeDocumentUri(authority, it), flags) }
         slices.forEach {
             grantUriPermission(target, DocumentsContract.buildDocumentUri("io.github.mny315.carlitos.test.slices", it), flags)

@@ -33,11 +33,13 @@ object Documents {
     }
     fun persist(uri: Uri, flags: Int) {
         check(flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) { "Read access was not granted" }
-        resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val access = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        resolver.takePersistableUriPermission(uri, access)
     }
     fun stat(uri: Uri): JSONObject {
         val doc = document(uri)
         val rows = DocumentIo.query(doc, doc)
+        if (rows.length() == 0) throw java.io.FileNotFoundException("Document is unavailable")
         check(rows.length() == 1) { "Document is unavailable; select its folder again" }
         return rows.getJSONObject(0)
     }
@@ -100,12 +102,20 @@ object Documents {
             check(Looper.myLooper() != Looper.getMainLooper()) { "Provider I/O must run off the UI thread" }
             val request = JSONObject(message)
             val uri = Uri.parse(request.getString("uri"))
+            val expected = request.optJSONObject("expected")
             val value: Any = when (request.getString("op")) {
                 "stat" -> stat(uri)
                 "children" -> children(uri)
                 "relative" -> relative(uri, request.getString("relative"))
                 "probe" -> probe(uri)
                 "open" -> open(uri)
+                "check-delete" -> { checkDeletion(uri, expected); true }
+                "delete" -> {
+                    if (checkDeletion(uri, expected)) {
+                        check(DC.deleteDocument(resolver, document(uri))) { "The provider could not delete this audio file" }
+                    }
+                    true
+                }
                 else -> error("Unknown document operation")
             }
             JSONObject().put("value", value).toString()
@@ -113,5 +123,26 @@ object Documents {
             android.util.Log.w("CarlitosDocuments", "Provider request failed", error)
             JSONObject().put("error", accessError(error) ?: error.message ?: "Cannot read this source. Select its folder again.").toString()
         }
+    }
+    private fun checkDeletion(uri: Uri, expected: JSONObject?): Boolean {
+        val doc = document(uri)
+        val metadata = try { stat(doc) } catch (_: java.io.FileNotFoundException) { return false }
+        check(!metadata.getBoolean("directory") && metadata.getBoolean("deletable")) { "The provider does not allow deleting this audio file" }
+        check(Bridge.context.checkUriPermission(doc, android.os.Process.myPid(), android.os.Process.myUid(),
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            "Write access was not granted. Select the source folder again."
+        }
+        // A stable document ID can refer to content overwritten since import.
+        // Check again at deletion, after the complete group's preflight too.
+        if (expected != null) {
+            for (field in listOf("size", "modified")) {
+                if (!expected.isNull(field)) {
+                    check(!metadata.isNull(field) && metadata.getLong(field) == expected.getLong(field)) {
+                        "Audio file changed since import. Refresh the source or uncheck file deletion."
+                    }
+                }
+            }
+        }
+        return true
     }
 }
