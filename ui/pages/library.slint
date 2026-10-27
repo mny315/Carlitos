@@ -106,7 +106,7 @@ component BookRow inherits Rectangle {
             x: book-menu-action.absolute-position.x - row.absolute-position.x + (book-menu-action.width - self.width) / 2;
             y: parent.height - self.height - 6px;
             width: 15px; height: 15px; colorize: Theme.accent;
-            accessible-label: Theme.t("Готова к синхронизации: ", "Ready to sync: ") + root.book.title;
+            accessible-label: Theme.t("Есть на связанном устройстве: ", "Available on a paired device: ") + root.book.title;
         }
     }
 }

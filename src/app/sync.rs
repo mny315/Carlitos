@@ -52,13 +52,16 @@ impl Controller {
                 s.sync_rates(&library)?,
                 crate::sync::Index::new(&library, &s.fingerprints()?)
                     .books
-                    .into_keys()
+                    .into_iter()
+                    .map(|(id, book)| (id, book.key))
                     .collect(),
             ))
         }) {
-            Ok((records, rates, ready)) => {
-                let _ = self.events.try_send(Event::SyncReady(ready));
-                self.sync.as_ref().unwrap().publish(records, rates);
+            Ok((records, rates, books)) => {
+                self.sync
+                    .as_ref()
+                    .unwrap()
+                    .publish_catalog(records, rates, books);
             }
             Err(error) => self.notice(format!(
                 "{}: {error:#}",

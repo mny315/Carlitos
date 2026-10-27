@@ -85,6 +85,7 @@ impl Record {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Status {
+    pub ready_books: Vec<crate::library::Id>,
     pub enabled: bool,
     pub running: bool,
     pub busy: bool,

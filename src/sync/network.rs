@@ -1,4 +1,6 @@
 #[cfg(test)]
+mod inventory_tests;
+#[cfg(test)]
 mod pairing_tests;
 mod pin;
 #[cfg(test)]
@@ -169,6 +171,8 @@ struct Shared {
     pairing_failure: Option<String>,
     records: Vec<Record>,
     rates: Vec<RateRecord>,
+    books: BTreeMap<crate::library::Id, String>,
+    inventories: BTreeMap<String, (BTreeSet<String>, Instant)>,
     online: BTreeMap<String, Instant>,
     message: String,
     error: bool,
@@ -191,10 +195,49 @@ impl Shared {
             port: self.config.port,
             records: self.records.clone(),
             rates: self.rates.clone(),
+            inventory: Some(
+                self.books
+                    .values()
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+            ),
+            inventory_only: false,
+        }
+    }
+    fn inventory_exchange(&self) -> Exchange {
+        let mut exchange = self.exchange();
+        exchange.records.clear();
+        exchange.rates.clear();
+        exchange.inventory_only = true;
+        exchange
+    }
+    fn receive_inventory(&mut self, id: &str, inventory: Option<Vec<String>>) {
+        if let Some(books) = inventory {
+            self.inventories
+                .insert(id.into(), (books.into_iter().collect(), Instant::now()));
+        } else {
+            self.inventories.remove(id);
         }
     }
     fn status(&self) -> Status {
+        let available: BTreeSet<_> = self
+            .inventories
+            .iter()
+            .filter(|(id, (_, updated))| {
+                updated.elapsed() < Duration::from_secs(15)
+                    && self.config.peers.iter().any(|p| &p.id == *id)
+            })
+            .flat_map(|(_, (books, _))| books.iter())
+            .collect();
         Status {
+            ready_books: self
+                .books
+                .iter()
+                .filter(|(_, key)| available.contains(key))
+                .map(|(id, _)| *id)
+                .collect(),
             enabled: true,
             running: self.running,
             busy: self.pairing.is_some()
@@ -323,6 +366,8 @@ impl Network {
             pairing_failure: None,
             records: vec![],
             rates: vec![],
+            books: BTreeMap::new(),
+            inventories: BTreeMap::new(),
             online: BTreeMap::new(),
             message: String::new(),
             error: false,
@@ -395,6 +440,7 @@ impl Network {
                                 config.save(&state.path)?;
                                 state.config = config;
                                 state.online.remove(&id);
+                                state.inventories.remove(&id);
                                 if state.pairing.as_ref().is_some_and(|(i, _)| i.device == id) { state.pairing = None; state.pairing_failure = None; }
                                 state.generation += 1;
                             }
@@ -522,14 +568,14 @@ impl Network {
                 pending.retain(|id| peers.iter().any(|peer| &peer.id == id));
                 for (mut peer, ticket) in peers.into_iter().map(|p| (p, String::new())).chain(reverse) {
                     if jobs.len() >= 8 || jobs.iter().any(|(id, _)| *id == peer.id) { continue; }
-                    if !automatic && ticket.is_empty() && !pending.contains(&peer.id) { continue; }
+                    let inventory_only = !automatic && ticket.is_empty() && !pending.contains(&peer.id);
                     if !pending.contains(&peer.id) && attempts.get(&peer.id).is_some_and(|t| t.elapsed() < Duration::from_secs(3)) { continue; }
                     if let Some(ad) = discovered.get(&peer.id) { peer.addresses = merge_addresses(&peer.addresses, &ad.addresses); }
                     attempts.insert(peer.id.clone(), Instant::now());
                     let shared = worker.clone();
                     let sender = tx.clone();
                     let id = peer.id.clone();
-                    if let Ok(job) = thread::Builder::new().name("carlitos-sync-out".into()).spawn(move || { let _ = connect(&shared, &sender, peer, &ticket, generation); }) { pending.remove(&id); jobs.push((id, job)); }
+                    if let Ok(job) = thread::Builder::new().name("carlitos-sync-out".into()).spawn(move || { let _ = connect_exchange(&shared, &sender, peer, &ticket, generation, inventory_only); }) { pending.remove(&id); jobs.push((id, job)); }
                 }
                 // Requests/publications unpark immediately; only active exchanges
                 // need the shorter polling interval.
@@ -544,11 +590,30 @@ impl Network {
             thread: Some(thread),
         })
     }
+    #[cfg(test)]
     pub fn publish(&self, records: Vec<Record>, rates: Vec<RateRecord>) {
+        let books = records
+            .iter()
+            .map(|r| r.book.clone())
+            .chain(rates.iter().map(|r| r.book.clone()))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(id, key)| (id as crate::library::Id + 1, key))
+            .collect();
+        self.publish_catalog(records, rates, books);
+    }
+    pub fn publish_catalog(
+        &self,
+        records: Vec<Record>,
+        rates: Vec<RateRecord>,
+        books: BTreeMap<crate::library::Id, String>,
+    ) {
         let mut state = self.shared.lock().unwrap();
-        if state.records != records || state.rates != rates {
+        if state.records != records || state.rates != rates || state.books != books {
             state.records = records;
             state.rates = rates;
+            state.books = books;
             state.dirty = true;
             state.sequence += 1;
             if let Some(thread) = &self.thread {
@@ -725,9 +790,19 @@ fn key(value: &str) -> Result<[u8; 32]> {
 fn connect(
     shared: &Arc<Mutex<Shared>>,
     tx: &mpsc::Sender<Command>,
+    peer: Peer,
+    invitation: &str,
+    generation: u64,
+) -> Result<()> {
+    connect_exchange(shared, tx, peer, invitation, generation, false)
+}
+fn connect_exchange(
+    shared: &Arc<Mutex<Shared>>,
+    tx: &mpsc::Sender<Command>,
     mut peer: Peer,
     invitation: &str,
     generation: u64,
+    inventory_only: bool,
 ) -> Result<()> {
     let (hello, exchange, sequence) = {
         let state = shared.lock().unwrap();
@@ -742,7 +817,11 @@ fn connect(
                 to: peer.id.clone(),
                 invitation: invitation.into(),
             },
-            state.exchange(),
+            if inventory_only {
+                state.inventory_exchange()
+            } else {
+                state.exchange()
+            },
             state.sequence,
         )
     };
@@ -814,11 +893,16 @@ fn connect(
     }) {
         state.remember(peer.clone())?;
     }
-    state.delivered.insert(peer.id.clone(), sequence);
+    state.receive_inventory(&peer.id, received.inventory);
+    if !inventory_only {
+        state.delivered.insert(peer.id.clone(), sequence);
+    }
     finish_pairing(&mut state, &peer.id, invitation, &peer.key);
     state.online.insert(peer.id, Instant::now());
-    state.activity = Some(Instant::now());
-    let _ = tx.send(Command::SyncIncoming(received.records, received.rates));
+    if !inventory_only && !received.inventory_only {
+        state.activity = Some(Instant::now());
+        let _ = tx.send(Command::SyncIncoming(received.records, received.rates));
+    }
     Ok(())
 }
 fn accept(
@@ -896,8 +980,18 @@ fn accept(
             })?;
         }
         finish_pairing(&mut state, &hello.from, &hello.invitation, &secret);
-        let _ = tx.send(Command::SyncIncoming(received.records, received.rates));
-        (state.exchange(), state.sequence)
+        state.receive_inventory(&hello.from, received.inventory);
+        if !received.inventory_only {
+            let _ = tx.send(Command::SyncIncoming(received.records, received.rates));
+        }
+        (
+            if received.inventory_only {
+                state.inventory_exchange()
+            } else {
+                state.exchange()
+            },
+            state.sequence,
+        )
     };
     channel.send(&exchange)?;
     let mut state = shared.lock().unwrap();
@@ -906,8 +1000,10 @@ fn accept(
         "Sync cancelled"
     );
     state.online.insert(hello.from.clone(), Instant::now());
-    state.activity = Some(Instant::now());
-    state.delivered.insert(hello.from, sequence);
+    if !exchange.inventory_only {
+        state.activity = Some(Instant::now());
+        state.delivered.insert(hello.from, sequence);
+    }
     Ok(())
 }
 

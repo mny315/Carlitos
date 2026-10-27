@@ -144,6 +144,9 @@ impl Controller {
             SyncIncoming(records, rates) => self.receive_sync(records, rates)?,
             SyncStatus(status) => {
                 if self.sync.is_some() {
+                    let _ = self
+                        .events
+                        .try_send(Event::SyncReady(status.ready_books.clone()));
                     let _ = self.events.try_send(Event::SyncStatus(status));
                 }
             }

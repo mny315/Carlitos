@@ -7,7 +7,7 @@ use std::io::{Cursor, Read};
 const RECORD_SIZE: usize = 101;
 const RATE_SIZE: usize = 64;
 // Different offers fall back to JSON in both directions, including compact v1.
-const OFFER: &[u8] = b"Carlitos compact 2\0";
+const OFFER: &[u8] = b"Carlitos compact 3\0";
 
 fn rate_bytes(rate: &RateRecord, bytes: &mut Vec<u8>) -> Result<()> {
     rate.validate()?;
@@ -51,6 +51,17 @@ pub(super) fn offer(exchange: &Exchange) -> Result<Vec<u8>> {
     for rate in rates {
         rate_bytes(rate, &mut bytes)?;
     }
+    bytes.push(u8::from(exchange.inventory_only));
+    if let Some(books) = &exchange.inventory {
+        bytes.push(1);
+        let mut books = books.clone();
+        books.sort();
+        for book in books {
+            bytes.extend(hex::decode(book)?);
+        }
+    } else {
+        bytes.push(0);
+    }
     let mut offer = OFFER.to_vec();
     offer.extend(Sha256::digest(bytes));
     Ok(offer)
@@ -68,12 +79,25 @@ pub(super) fn encode(exchange: &Exchange, unchanged: bool) -> Result<Vec<u8>> {
     bytes.extend(exchange.port.to_be_bytes());
     bytes.extend((if unchanged { 0 } else { exchange.records.len() } as u16).to_be_bytes());
     bytes.extend((if unchanged { 0 } else { exchange.rates.len() } as u16).to_be_bytes());
+    bytes.push(u8::from(exchange.inventory_only));
+    bytes.extend(
+        exchange
+            .inventory
+            .as_ref()
+            .map_or(u16::MAX, |books| books.len() as u16)
+            .to_be_bytes(),
+    );
     if !unchanged {
         for record in &exchange.records {
             record_bytes(record, &mut bytes)?;
         }
         for rate in &exchange.rates {
             rate_bytes(rate, &mut bytes)?;
+        }
+    }
+    if let Some(books) = &exchange.inventory {
+        for book in books {
+            bytes.extend(hex::decode(book)?);
         }
     }
     Ok(bytes)
@@ -95,10 +119,20 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Exchange> {
     let port = u16::from_be_bytes(read(&mut reader)?);
     let count = u16::from_be_bytes(read(&mut reader)?) as usize;
     let rate_count = u16::from_be_bytes(read(&mut reader)?) as usize;
+    let flags = read::<1>(&mut reader)?[0];
+    ensure!(flags <= 1, "Invalid inventory flags");
+    let inventory_count = u16::from_be_bytes(read(&mut reader)?);
+    let book_count = if inventory_count == u16::MAX {
+        0
+    } else {
+        inventory_count as usize
+    };
     ensure!(
         count <= MAX_RECORDS
             && rate_count <= MAX_RECORDS
-            && bytes.len() == length + 7 + count * RECORD_SIZE + rate_count * RATE_SIZE,
+            && book_count <= MAX_RECORDS
+            && bytes.len()
+                == length + 10 + count * RECORD_SIZE + rate_count * RATE_SIZE + book_count * 32,
         "Invalid compact sync length"
     );
     let mut records = Vec::with_capacity(count);
@@ -129,11 +163,22 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Exchange> {
             device: hex::encode(read::<16>(&mut reader)?),
         });
     }
+    let inventory = if inventory_count == u16::MAX {
+        None
+    } else {
+        Some(
+            (0..book_count)
+                .map(|_| read::<32>(&mut reader).map(hex::encode))
+                .collect::<Result<Vec<_>>>()?,
+        )
+    };
     let exchange = Exchange {
         name,
         port,
         records,
         rates,
+        inventory,
+        inventory_only: flags == 1,
     };
     exchange.validate()?;
     Ok(exchange)
@@ -145,6 +190,8 @@ pub(super) mod tests {
 
     pub(crate) fn fixture() -> Exchange {
         Exchange {
+            inventory: Some(vec!["dd".repeat(32), "ee".repeat(32)]),
+            inventory_only: false,
             name: "Телефон".into(),
             port: 12345,
             rates: vec![RateRecord {
@@ -177,12 +224,14 @@ pub(super) mod tests {
         assert_eq!(decoded.port, exchange.port);
         assert_eq!(decoded.records, exchange.records);
         assert_eq!(decoded.rates, exchange.rates);
+        assert_eq!(decoded.inventory, exchange.inventory);
         let json = serde_json::to_vec(&exchange)?;
         assert!(encoded.len() * 2 < json.len());
         let unchanged = encode(&exchange, true)?;
         assert!(decode(&unchanged)?.records.is_empty());
         assert!(decode(&unchanged)?.rates.is_empty());
-        assert_eq!(unchanged.len(), exchange.name.len() + 7);
+        assert_eq!(decode(&unchanged)?.inventory, exchange.inventory);
+        assert!(unchanged.len() < encoded.len());
         println!(
             "Sync payload: JSON {} B; binary {} B; unchanged {} B",
             json.len(),
@@ -222,8 +271,38 @@ pub(super) mod tests {
         invalid.push(0);
         assert!(decode(&invalid).is_err());
         let mut invalid = encoded;
-        invalid[exchange.name.len() + 7 + 76] = 255;
+        invalid[exchange.name.len() + 10 + 76] = 255;
         assert!(decode(&invalid).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn inventory_roundtrips_empty_unknown_and_unchanged_without_progress() -> Result<()> {
+        let mut exchange = fixture();
+        exchange.records.clear();
+        exchange.rates.clear();
+        exchange.inventory_only = true;
+        for books in [None, Some(vec![]), Some(vec!["ab".repeat(32)])] {
+            exchange.inventory = books;
+            for unchanged in [false, true] {
+                let decoded = decode(&encode(&exchange, unchanged)?)?;
+                assert_eq!(decoded.inventory, exchange.inventory);
+                assert!(
+                    decoded.inventory_only
+                        && decoded.records.is_empty()
+                        && decoded.rates.is_empty()
+                );
+            }
+        }
+        let mut legacy = serde_json::to_value(fixture())?;
+        legacy.as_object_mut().unwrap().remove("inventory");
+        legacy.as_object_mut().unwrap().remove("inventory_only");
+        let legacy: Exchange = serde_json::from_value(legacy)?;
+        assert!(legacy.inventory.is_none() && !legacy.inventory_only);
+        legacy.validate()?;
+        let mut old_offer = b"Carlitos compact 2\0".to_vec();
+        old_offer.extend([0; 32]);
+        assert!(!supported(&old_offer));
         Ok(())
     }
 }

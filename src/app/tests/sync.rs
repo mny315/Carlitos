@@ -55,9 +55,9 @@ fn sync_read_error_names_the_file_and_preserves_the_cause() -> Result<()> {
 }
 
 #[test]
-fn sync_ready_requires_a_valid_fingerprint_for_every_part() -> Result<()> {
+fn fingerprinted_books_are_not_marked_ready_without_a_matching_remote_inventory() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let (mut app, _commands) = controller(temp.path())?;
+    let (mut app, commands) = controller(temp.path())?;
     let (events, received) = async_channel::unbounded();
     app.events = events;
     app.options.settings.local_sync = true;
@@ -70,27 +70,34 @@ fn sync_ready_requires_a_valid_fingerprint_for_every_part() -> Result<()> {
             crate::sync::Fingerprint::read(file, &std::sync::atomic::AtomicBool::new(false))
         })
         .collect::<Result<Vec<_>>>()?;
-    let last = fingerprints.len() - 1;
-    app.store()?
-        .save_fingerprints(&library, &fingerprints[..last])?;
+    app.store()?.save_fingerprints(&library, &fingerprints)?;
     app.publish_sync();
-    let latest_ready = || {
-        let mut ready = None;
-        while let Ok(event) = received.try_recv() {
-            if let Event::SyncReady(books) = event {
-                ready = Some(books);
-            }
+    loop {
+        let command = commands.recv_timeout(Duration::from_secs(5))?;
+        if let Command::SyncStatus(status) = command {
+            assert!(status.ready_books.is_empty());
+            app.handle(Command::SyncStatus(status))?;
+            break;
         }
-        ready.expect("Sync readiness was not published")
-    };
-    assert!(latest_ready().is_empty());
-    app.store()?
-        .save_fingerprints(&library, &fingerprints[last..])?;
-    app.publish_sync();
-    assert_eq!(latest_ready(), vec![library.books[0].id]);
-    app.library.media[0].modified = Some(1);
-    app.publish_sync();
-    assert!(latest_ready().is_empty());
+    }
+    assert!(
+        std::iter::from_fn(|| received.try_recv().ok())
+            .all(|event| !matches!(event, Event::SyncReady(books) if !books.is_empty()))
+    );
+    app.handle(Command::SyncStatus(crate::sync::Status {
+        ready_books: vec![library.books[0].id],
+        ..Default::default()
+    }))?;
+    assert!(
+        std::iter::from_fn(|| received.try_recv().ok()).any(
+            |event| matches!(event, Event::SyncReady(books) if books == [library.books[0].id])
+        )
+    );
+    app.handle(Command::SyncStatus(crate::sync::Status::default()))?;
+    assert!(
+        std::iter::from_fn(|| received.try_recv().ok())
+            .any(|event| matches!(event, Event::SyncReady(books) if books.is_empty()))
+    );
     Ok(())
 }
 

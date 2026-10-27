@@ -39,9 +39,23 @@ pub(super) struct Exchange {
     pub records: Vec<Record>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rates: Vec<RateRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub inventory_only: bool,
 }
 impl Exchange {
     pub fn validate(&self) -> Result<()> {
+        if let Some(books) = &self.inventory {
+            ensure!(
+                books.len() <= MAX_RECORDS && books.iter().all(|key| valid_hex(key, 32)),
+                "Invalid book inventory"
+            );
+        }
+        ensure!(
+            !self.inventory_only || (self.records.is_empty() && self.rates.is_empty()),
+            "Inventory exchange contains progress"
+        );
         ensure!(self.port != 0, "Invalid listening port");
         ensure!(
             !self.name.is_empty()
@@ -380,6 +394,8 @@ mod tests {
                 port: exchange.port,
                 records: exchange.records.clone(),
                 rates: exchange.rates.clone(),
+                inventory: exchange.inventory.clone(),
+                inventory_only: exchange.inventory_only,
             };
             let server = thread::spawn(move || -> Result<()> {
                 let (mut stream, _) = listener.accept()?;
