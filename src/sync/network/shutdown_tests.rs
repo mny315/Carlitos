@@ -1,7 +1,8 @@
 use super::*;
+use std::io::{ErrorKind, Read};
 
 #[test]
-fn shutdown_interrupts_idle_incoming_and_outgoing_handshakes() -> Result<()> {
+fn shutdown_closes_idle_peers_and_joins_incoming_and_outgoing_workers() -> Result<()> {
     for outgoing in [false, true] {
         let temp = tempfile::tempdir()?;
         let network = Network::without_discovery(
@@ -10,7 +11,7 @@ fn shutdown_interrupts_idle_incoming_and_outgoing_handshakes() -> Result<()> {
             mpsc::channel().0,
         )?;
         let shared = network.shared.clone();
-        let peer = if outgoing {
+        let mut peer = if outgoing {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             listener.set_nonblocking(true)?;
             let invitation =
@@ -39,24 +40,52 @@ fn shutdown_interrupts_idle_incoming_and_outgoing_handshakes() -> Result<()> {
             ensure!(Instant::now() < deadline, "Handshake worker did not start");
             thread::sleep(Duration::from_millis(2));
         }
-        // The peer stays connected but never answers. Drop must wake the
-        // blocked reader, rather than wait for the protocol's normal timeout.
+        // The peer never answers. Drop must promptly close its remote end.
+        // Keep this peer's send side open until the worker has finished.
         let (finished, received) = mpsc::channel();
+        let (starting, started) = mpsc::channel();
         let worker = thread::spawn(move || {
+            let _ = starting.send(());
             let started = Instant::now();
             drop(network);
             let _ = finished.send(started.elapsed());
         });
-        // Measure Drop itself, excluding thread startup and channel delivery
-        // on a loaded runner. Keep the latency limit below the 2 s I/O timeout.
+        started.recv_timeout(Duration::from_secs(5))?;
+        let closed = (|| -> std::io::Result<()> {
+            let until = Instant::now() + Duration::from_secs(1);
+            let mut bytes = [0; 1024];
+            loop {
+                peer.set_read_timeout(Some(until.saturating_duration_since(Instant::now())))?;
+                match peer.read(&mut bytes) {
+                    Ok(0) => return Ok(()),
+                    // Outgoing handshakes may have already sent their hello.
+                    Ok(_) => {}
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            ErrorKind::ConnectionReset
+                                | ErrorKind::ConnectionAborted
+                                | ErrorKind::NotConnected
+                        ) =>
+                    {
+                        return Ok(());
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        })();
         let result = received.recv_timeout(Duration::from_secs(5));
         // Always release/join the old implementation before asserting red.
         let _ = peer.shutdown(Shutdown::Both);
         worker.join().unwrap();
+        closed.with_context(|| format!("Shutdown left an idle peer open (outgoing={outgoing})"))?;
         let elapsed = result
             .with_context(|| format!("Shutdown waited for an idle peer (outgoing={outgoing})"))?;
+        // Winsock can finish an already pending recv at its 2 s I/O timeout
+        // even after shutdown closes the peer's connection. Unix wakes it.
+        let limit = Duration::from_secs(if cfg!(windows) { 3 } else { 1 });
         ensure!(
-            elapsed < Duration::from_secs(1),
+            elapsed < limit,
             "Shutdown took {elapsed:?} for an idle peer (outgoing={outgoing})"
         );
         assert!(shared.lock().unwrap().connections.is_empty());
