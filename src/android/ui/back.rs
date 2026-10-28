@@ -10,6 +10,8 @@ impl BackRequests {
     }
 
     pub fn invalidate(&self) {
+        // try_update requires Rust 1.95; keep the declared Rust 1.92 minimum.
+        #[allow(deprecated)]
         let _ = self
             .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |state| {
