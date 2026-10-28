@@ -45,7 +45,7 @@ impl Player {
         gst::init()?;
         // Detect incomplete installations before playbin starts an error/retry loop.
         for required in [
-            "playbin3",
+            "playbin",
             "filesrc",
             "typefind",
             "queue",
@@ -85,9 +85,11 @@ impl Player {
         // Even an early construction failure must be retryable from the UI.
         self.phase = Phase::Error;
         self.position = position;
-        let pipeline = gst::ElementFactory::make("playbin3")
+        // playbin3 can leave raw PCM blocked inside decodebin3 before preroll
+        // when a load replaces a flushing seek. playbin avoids that selection race.
+        let pipeline = gst::ElementFactory::make("playbin")
             .build()
-            .context(crate::i18n::tr("Не установлен GStreamer playbin3"))?;
+            .context(crate::i18n::tr("Не установлен GStreamer playbin"))?;
         pipeline.set_property("uri", uri);
         pipeline.set_property("volume", self.volume);
         pipeline.set_property("mute", self.muted);

@@ -1,4 +1,5 @@
 #![cfg(target_os = "linux")]
+use anyhow::Context;
 use carlitos::{
     library::file_uri,
     player::{Event, EventKind, Phase, Player},
@@ -82,6 +83,50 @@ fn advance(
     Ok(())
 }
 #[test]
+fn repeated_loads_restore_position_and_rate_with_silence_skipping() -> anyhow::Result<()> {
+    let context = gst::glib::MainContext::new();
+    context.with_thread_default(|| -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let stereo = dir.path().join("stereo.wav");
+        fixture(
+            &stereo,
+            &[(1000, true), (3000, false), (1000, true), (2000, false)],
+        )?;
+        let silent = dir.path().join("silent.wav");
+        fixture(&silent, &[(10_000, false)])?;
+        let (tx, rx) = async_channel::unbounded();
+        let mut player = Player::new(tx, true)?;
+        player.set_skip_silence(true)?;
+        for attempt in 0..120 {
+            let rate = [1.0, 2.0, 0.5][attempt % 3];
+            let position = [0, 1500, 4500][attempt % 3];
+            // Replace the previous file while its rate-change seek is in flight,
+            // as when switching parts immediately after changing playback speed.
+            player.set_rate(rate)?;
+            let (path, duration) = if attempt % 2 == 0 {
+                (&stereo, 7000)
+            } else {
+                (&silent, 10_000)
+            };
+            player.load(&file_uri(path)?, position, false)?;
+            settle(&context, &mut player, &rx).with_context(|| {
+                format!("load {attempt}, file {path:?}, position {position}, rate {rate}")
+            })?;
+            assert!(!player.playing);
+            assert!(player.seekable && player.skip_silence());
+            assert_eq!(player.rate(), rate);
+            assert_eq!(player.duration, Some(duration));
+            assert!(
+                player.position.abs_diff(position) < 100,
+                "load {attempt}: expected {position}, got {}",
+                player.position
+            );
+        }
+        Ok(())
+    })??;
+    Ok(())
+}
+#[test]
 fn silence_skip_preserves_source_time_seeks_speed_pause_and_eos() -> anyhow::Result<()> {
     let context = gst::glib::MainContext::new();
     context.with_thread_default(|| -> anyhow::Result<()> {
@@ -95,7 +140,7 @@ fn silence_skip_preserves_source_time_seeks_speed_pause_and_eos() -> anyhow::Res
         let (tx, rx) = async_channel::unbounded();
         let mut player = Player::new(tx, true)?;
         player.load(&uri, 1500, false)?;
-        settle(&context, &mut player, &rx)?;
+        settle(&context, &mut player, &rx).context("initial load")?;
         assert_eq!(player.duration, Some(7000));
         player.set_playing(true)?;
         advance(&context, &mut player, &rx, 800)?;
@@ -150,7 +195,7 @@ fn silence_skip_preserves_source_time_seeks_speed_pause_and_eos() -> anyhow::Res
         }
         player.set_rate(1.)?;
         player.load(&uri, 4500, false)?;
-        settle(&context, &mut player, &rx)?;
+        settle(&context, &mut player, &rx).context("reload with silence skipping enabled")?;
         assert!(player.skip_silence());
         assert!(
             player.position.abs_diff(4500) < 100,
@@ -171,7 +216,7 @@ fn silence_skip_preserves_source_time_seeks_speed_pause_and_eos() -> anyhow::Res
         let silent = dir.path().join("silent.wav");
         fixture(&silent, &[(10_000, false)])?;
         player.load(&file_uri(&silent)?, 0, true)?;
-        settle(&context, &mut player, &rx)?;
+        settle(&context, &mut player, &rx).context("load entirely silent file")?;
         let started = Instant::now();
         while !player.ended && started.elapsed() < Duration::from_secs(2) {
             pump(&context, &mut player, &rx)?;

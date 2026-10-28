@@ -12,7 +12,7 @@
   "Не найден {}": "Not found: {}",
   "Не удалось открыть библиотеку": "Could not open the library",
   "Не удалось получить URI: {}": "Could not create a URI for {}",
-  "Не установлен GStreamer playbin3": "GStreamer playbin3 is not installed",
+  "Не установлен GStreamer playbin": "GStreamer playbin is not installed",
   "Недопустимый относительный путь": "Invalid relative path",
   "Укажите путь к существующей папке": "Enter the path to an existing folder",
   "Нет активного файла": "No active file",
