@@ -35,6 +35,8 @@ fn shutdown_closes_idle_peers_and_joins_incoming_and_outgoing_workers() -> Resul
             let port = shared.lock().unwrap().config.port;
             TcpStream::connect((Ipv4Addr::LOCALHOST, port))?
         };
+        // Accepted sockets inherit the listener's nonblocking mode on Windows.
+        peer.set_nonblocking(false)?;
         let deadline = Instant::now() + Duration::from_secs(3);
         while shared.lock().unwrap().connections.is_empty() {
             ensure!(Instant::now() < deadline, "Handshake worker did not start");
