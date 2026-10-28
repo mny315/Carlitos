@@ -1,0 +1,219 @@
+[
+  {
+    "uptime_s": 8181.06,
+    "charge_uah": 5181208,
+    "current_ua": -710937,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 17859,
+        "rss_pages": 36643,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 39323,
+        "rss_pages": 10139,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4638,
+        "rss_pages": 5460,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28359,
+        "rss_pages": 116674,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8196.74,
+    "charge_uah": 5178773,
+    "current_ua": -572753,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 19159,
+        "rss_pages": 36792,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 39647,
+        "rss_pages": 10139,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4693,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28379,
+        "rss_pages": 118617,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8211.8,
+    "charge_uah": 5176281,
+    "current_ua": -571288,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 20401,
+        "rss_pages": 37094,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 39960,
+        "rss_pages": 10134,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4745,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28418,
+        "rss_pages": 109052,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8226.74,
+    "charge_uah": 5173579,
+    "current_ua": -574218,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 21641,
+        "rss_pages": 37331,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 40274,
+        "rss_pages": 10144,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4796,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28436,
+        "rss_pages": 110869,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8241.8,
+    "charge_uah": 5171154,
+    "current_ua": -573730,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 22883,
+        "rss_pages": 37552,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 40587,
+        "rss_pages": 10144,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4849,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28452,
+        "rss_pages": 112748,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8256.74,
+    "charge_uah": 5168738,
+    "current_ua": -574706,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 24117,
+        "rss_pages": 37742,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 40901,
+        "rss_pages": 10144,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4900,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28472,
+        "rss_pages": 114687,
+        "start_ticks": 1382
+      }
+    }
+  },
+  {
+    "uptime_s": 8271.81,
+    "charge_uah": 5166316,
+    "current_ua": -576171,
+    "processes": {
+      "io.github.mny315.carlitos": {
+        "pid": 14729,
+        "cpu_ticks": 25360,
+        "rss_pages": 37903,
+        "start_ticks": 793164
+      },
+      "surfaceflinger": {
+        "pid": 676,
+        "cpu_ticks": 41213,
+        "rss_pages": 10144,
+        "start_ticks": 492
+      },
+      "audioserver": {
+        "pid": 974,
+        "cpu_ticks": 4953,
+        "rss_pages": 5459,
+        "start_ticks": 852
+      },
+      "system_server": {
+        "pid": 2081,
+        "cpu_ticks": 28491,
+        "rss_pages": 116635,
+        "start_ticks": 1382
+      }
+    }
+  }
+]

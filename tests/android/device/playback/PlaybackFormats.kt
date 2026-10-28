@@ -3,6 +3,16 @@ package io.github.mny315.carlitos
 import androidx.media3.common.util.UnstableApi
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
+
+@UnstableApi
+internal fun AudioSink.outputSink(): AudioSink {
+    var result = this
+    val delegate = ForwardingAudioSink::class.java.getDeclaredField("sink").apply { isAccessible = true }
+    while (result is ForwardingAudioSink) result = delegate.get(result) as AudioSink
+    return result
+}
 
 @UnstableApi
 internal fun PlaybackSuite.outputDetails(): JSONObject {
@@ -16,12 +26,15 @@ internal fun PlaybackSuite.outputDetails(): JSONObject {
         player.createMessage { _, _ ->
             output = runCatching {
                 val sink = androidx.media3.exoplayer.audio.MediaCodecAudioRenderer::class.java
-                    .getDeclaredField("audioSink").apply { isAccessible = true }.get(renderer)
+                    .getDeclaredField("audioSink").apply { isAccessible = true }.get(renderer) as AudioSink
                 val track = androidx.media3.exoplayer.audio.DefaultAudioSink::class.java
-                    .getDeclaredField("audioTrack").apply { isAccessible = true }.get(sink) as android.media.AudioTrack
+                    .getDeclaredField("audioTrack").apply { isAccessible = true }.get(sink.outputSink()) as android.media.AudioTrack
                 JSONObject().put("rate", track.sampleRate).put("channels", track.channelCount)
                     .put("mode", track.performanceMode).put("underruns", track.underrunCount)
                     .put("frames", track.bufferSizeInFrames)
+                    .put("capacity_frames", track.bufferCapacityInFrames).put("play_state", track.playState)
+                    .put("start_frames", if (android.os.Build.VERSION.SDK_INT >= 31) track.startThresholdInFrames else 0)
+                    .put("offloaded", android.os.Build.VERSION.SDK_INT >= 29 && track.isOffloadedPlayback)
             }
             done.countDown()
         }.send()

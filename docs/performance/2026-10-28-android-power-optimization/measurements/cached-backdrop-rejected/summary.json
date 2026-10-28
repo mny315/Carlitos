@@ -1,0 +1,19 @@
+{
+  "name": "cached-motion",
+  "duration_s": 90.59999999999854,
+  "drain_mah": 15.007,
+  "device_average_ma": 596.304635761599,
+  "instantaneous_current_median_ma": 563.964,
+  "cpu_percent_one_core": {
+    "io.github.mny315.carlitos": 83.65342163355542,
+    "surfaceflinger": 20.65121412803565,
+    "audioserver": 3.5099337748344936,
+    "system_server": 1.357615894039757
+  },
+  "rss_mib": {
+    "io.github.mny315.carlitos": 136.125,
+    "surfaceflinger": 39.51171875,
+    "audioserver": 21.33203125,
+    "system_server": 432.43359375
+  }
+}

@@ -1,0 +1,4 @@
+PASS periodic checkpoints while playing with screen off
+WAIT unlock the phone before the cold launch (up to 90 seconds)
+PASS SIGKILL restores the last periodic checkpoint paused
+PASS force-stop stops audio; reopen restores pause, source position, speed, silence and volume

@@ -1,0 +1,9 @@
+PASS single-document import cannot bypass a source update or relocation
+PASS FLAC with a 393216-byte PCM packet imports without a fixed-buffer failure
+PASS output pcm-16000 pause/checkpoint/resume {"rate":16000,"channels":1,"mode":0,"underruns":0,"frames":1280,"capacity_frames":8000,"play_state":2,"start_frames":1280,"offloaded":false}
+FAIL java.lang.IllegalStateException: pcm-44100 did not resume from the paused position
+	at io.github.mny315.carlitos.PlaybackFormatsKt.formatCompatibilityChecks(PlaybackFormats.kt:75)
+	at io.github.mny315.carlitos.PlaybackScenariosKt.run(PlaybackScenarios.kt:33)
+	at io.github.mny315.carlitos.PlaybackScenariosKt.run$default(PlaybackScenarios.kt:13)
+	at io.github.mny315.carlitos.DeviceInstrumentation.onStart(DeviceInstrumentation.kt:174)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2361)

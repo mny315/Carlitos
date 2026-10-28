@@ -1,0 +1,61 @@
+{
+  "device": "Xiaomi MI MAX 3 (nitrogen)",
+  "android": "13 (API 33), LineageOS",
+  "package": "io.github.mny315.carlitos",
+  "version": "1.0.8",
+  "version_code": 17,
+  "commit": "07426df1602be16061a75da080e486f39fa90af7",
+  "abi": "arm64-v8a",
+  "profile": "release",
+  "source_release_apk_sha256": "919c4478d59d7e8633ef698e6a18ec8a5378f83b4e007755e662f24ed8a0a76b",
+  "installed_apk_sha256": "3c7a56afed94ddfcefd449af6d5c753427f4ed066f2e6dd3073ad1c4bdb8d92f",
+  "payload_verified_entries": 150,
+  "build_note": "Unmodified optimized release payload re-signed with existing Android debug certificate to allow in-place update and preserve app data.",
+  "screen": {
+    "width_px": 1080,
+    "height_px": 2160,
+    "brightness": 255,
+    "brightness_max": 255,
+    "brightness_mode": "manual"
+  },
+  "audio": {
+    "codec": "MP3",
+    "bitrate_bps": 64000,
+    "sample_rate_hz": 32000,
+    "channels": 2,
+    "duration_s": 1800,
+    "playback_speed": 1.0,
+    "skip_silence": false,
+    "system_volume": 0,
+    "system_volume_max": 25,
+    "app_volume": 0.7,
+    "output_route": "AUDIO_DEVICE_OUT_SPEAKER",
+    "audio_track": "active 32 kHz stereo PCM; AudioFlinger output 48 kHz PCM",
+    "fixture_sha256": "1462cf8dc8923ce3b1e7d8f808d7f84eac2b754abb8eb98b30f4fc6548bcd2e5",
+    "fixture_source": "tests/fixtures/import-stereo.mp3, repeated by FFmpeg stream copy"
+  },
+  "ui": {
+    "page": "library",
+    "books": 1,
+    "theme": "dark",
+    "animated_background": true,
+    "reduced_motion": false,
+    "local_sync": false
+  },
+  "instrumentation": {
+    "connection": "Wi-Fi ADB",
+    "charger_connected": false,
+    "phase_duration_s": 240,
+    "sample_interval_s": 15,
+    "warmup_s": 20,
+    "stopped_control_warmup_s": 45,
+    "charge_source": "batteryproperties getProperty(1), live Health HAL",
+    "current_source": "batteryproperties getProperty(2), live Health HAL",
+    "cpu_source": "/proc/PID/stat, (utime+stime), normalized to one core",
+    "clock_ticks_per_second": 100,
+    "page_size_bytes": 4096
+  },
+  "raw_capture_directory": "target/battery/20261027T182220Z",
+  "started_utc": "2026-10-27T18:32:37.200751+00:00",
+  "completed_utc": "2026-10-27T18:57:02.729749+00:00"
+}

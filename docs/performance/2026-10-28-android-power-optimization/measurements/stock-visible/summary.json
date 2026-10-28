@@ -1,0 +1,19 @@
+{
+  "name": "baseline-motion",
+  "duration_s": 90.74999999999909,
+  "drain_mah": 14.892,
+  "device_average_ma": 590.7570247933944,
+  "instantaneous_current_median_ma": 574.218,
+  "cpu_percent_one_core": {
+    "io.github.mny315.carlitos": 82.65564738292093,
+    "surfaceflinger": 20.826446280991945,
+    "audioserver": 3.471074380165324,
+    "system_server": 1.454545454545469
+  },
+  "rss_mib": {
+    "io.github.mny315.carlitos": 148.05859375,
+    "surfaceflinger": 39.625,
+    "audioserver": 21.32421875,
+    "system_server": 455.60546875
+  }
+}

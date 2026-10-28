@@ -1,0 +1,6 @@
+PASS idle service remains stopped across background/foreground checkpoints with no error banner
+PASS voice observation preserves PCM bytes and buffer ownership, throttles and disables
+PASS four frequency groups respond independently, without consuming PCM or sampling while disabled
+PASS background CPU, percent of one core: off=77.14, on=79.83
+PASS voice-reactive background at <=12.5 fps; setting persistence; zero visualizer frames and samples while disabled, reduced, paused, in background and screen off; audio continues
+PASS Android UI tests

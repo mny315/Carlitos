@@ -1,0 +1,24 @@
+{
+  "date_local": "2026-10-28",
+  "timezone": "Asia/Yekaterinburg",
+  "base_commit": "07426df1602be16061a75da080e486f39fa90af7",
+  "version": "1.0.8",
+  "production_changes_retained": false,
+  "device": "Xiaomi MI MAX 3",
+  "android_api": 33,
+  "final_decision": "All production experiments reverted after playback regressions; measurements and regression tests retained.",
+  "restored_apk_sha256": "b4c946fc8b4871e9bded947609af4529a3a61543d02abcd08a1481d9e25bf9af",
+  "measurement_source_folders": {
+    "stock-visible": "baseline-motion",
+    "cached-backdrop-rejected": "cached-motion",
+    "stock-screen-off": "baseline-background-motion",
+    "dynamic-scheduling-rejected": "dynamic-background-motion-2",
+    "larger-buffer-rejected": "portable-background"
+  },
+  "aborted_measurements_included": false,
+  "installed_apk_sha256": "b4c946fc8b4871e9bded947609af4529a3a61543d02abcd08a1481d9e25bf9af",
+  "installed_version": "1.0.8",
+  "installed_playback_checked": true,
+  "device_left_paused_screen_off": true,
+  "capture_script_smoke_test_seconds": 15
+}

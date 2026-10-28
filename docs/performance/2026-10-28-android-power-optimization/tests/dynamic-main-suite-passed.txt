@@ -1,0 +1,45 @@
+PASS single-document import cannot bypass a source update or relocation
+PASS FLAC with a 393216-byte PCM packet imports without a fixed-buffer failure
+PASS output pcm-16000 pause/checkpoint/resume {"rate":16000,"channels":1,"mode":0,"underruns":0,"frames":1288,"capacity_frames":1288,"play_state":2,"start_frames":1288,"offloaded":false}
+PASS output pcm-44100 pause/checkpoint/resume {"rate":44100,"channels":2,"mode":0,"underruns":0,"frames":3536,"capacity_frames":3536,"play_state":2,"start_frames":3536,"offloaded":false}
+PASS output pcm-96000 pause/checkpoint/resume {"rate":96000,"channels":2,"mode":0,"underruns":0,"frames":7688,"capacity_frames":7688,"play_state":2,"start_frames":7688,"offloaded":false}
+PASS output mp3-mono pause/checkpoint/resume {"rate":44100,"channels":1,"mode":0,"underruns":0,"frames":3536,"capacity_frames":3536,"play_state":2,"start_frames":3536,"offloaded":false}
+PASS output mp3-stereo pause/checkpoint/resume {"rate":32000,"channels":2,"mode":0,"underruns":0,"frames":2568,"capacity_frames":2568,"play_state":2,"start_frames":2568,"offloaded":false}
+PASS output aac pause/checkpoint/resume {"rate":44100,"channels":1,"mode":0,"underruns":0,"frames":3536,"capacity_frames":3536,"play_state":2,"start_frames":3536,"offloaded":false}
+PASS output m4b pause/checkpoint/resume {"rate":32000,"channels":2,"mode":0,"underruns":0,"frames":2568,"capacity_frames":2568,"play_state":2,"start_frames":2568,"offloaded":false}
+PASS output he-aac-v1 pause/checkpoint/resume {"rate":48000,"channels":2,"mode":0,"underruns":0,"frames":3844,"capacity_frames":3844,"play_state":2,"start_frames":3844,"offloaded":false}
+PASS output he-aac-v2 pause/checkpoint/resume {"rate":48000,"channels":2,"mode":0,"underruns":0,"frames":3844,"capacity_frames":3844,"play_state":2,"start_frames":3844,"offloaded":false}
+PASS output flac pause/checkpoint/resume {"rate":48000,"channels":2,"mode":0,"underruns":0,"frames":3844,"capacity_frames":3844,"play_state":2,"start_frames":3844,"offloaded":false}
+PASS output flac-large pause/checkpoint/resume {"rate":48000,"channels":6,"mode":0,"underruns":0,"frames":3844,"capacity_frames":3844,"play_state":2,"start_frames":3844,"offloaded":false}
+PASS service startup error clears queued loads and retries from the confirmed position
+PASS service startup timeout clears queued loads and retries from the confirmed position
+PASS stalled document load acknowledges checkpoint without saving an unconfirmed seek
+PASS repeated silence pauses keep the system controller and saved source clock aligned
+PASS rapid pause/speed/silence commands preserve the exact settled checkpoint
+PASS resume fades to the selected volume, never overshoots and retains mute
+PASS speed 0.5 source clock: 651 ms / 1301 ms
+PASS speed 0.75 source clock: 975 ms / 1300 ms
+PASS speed 1.0 source clock: 1301 ms / 1300 ms
+PASS speed 1.25 source clock: 1627 ms / 1300 ms
+PASS speed 1.5 source clock: 1952 ms / 1301 ms
+PASS speed 1.75 source clock: 2276 ms / 1300 ms
+PASS speed 2.0 source clock: 2602 ms / 1300 ms
+PASS speed 2.5 source clock: 3253 ms / 1301 ms
+PASS speed 3.0 source clock: 3903 ms / 1300 ms
+PASS chapters, ±15 s across parts, next/previous and rapid seek checkpoint
+PASS switching books checkpoints the previous book's confirmed live position
+PASS silence removal at 1x/2x, source position, seek and pause: 2585 -> 4645 ms
+PASS silence at 0.5: 3892 ms / 3284 ms, original-position seek and checkpoint
+PASS silence at 0.75: 4675 ms / 3270 ms, original-position seek and checkpoint
+PASS silence at 1.0: 7807 ms / 3272 ms, original-position seek and checkpoint
+PASS silence at 1.25: 8551 ms / 3277 ms, original-position seek and checkpoint
+PASS silence at 1.5: 11705 ms / 3279 ms, original-position seek and checkpoint
+PASS silence at 1.75: 12434 ms / 3274 ms, original-position seek and checkpoint
+PASS silence at 2.0: 15598 ms / 3272 ms, original-position seek and checkpoint
+PASS silence at 2.5: 19286 ms / 3273 ms, original-position seek and checkpoint
+PASS silence at 3.0: 23411 ms / 3275 ms, original-position seek and checkpoint
+PASS automatic part transition, completed book, system-play restart
+PASS missing/corrupt content URI preserves 7000 ms and retries from checkpoint
+PASS removing the actual recent task preserves service and source clock; reopening keeps player
+PASS volume/mute checkpoint, Activity recreation, persisted 1.75x + silence + 8000 ms
+PASS Android playback tests

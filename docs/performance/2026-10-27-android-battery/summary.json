@@ -1,0 +1,911 @@
+[
+  {
+    "phase": "paused_screen_on",
+    "duration_s": 240.85000000000036,
+    "sample_count": 17,
+    "charge_start_uah": 5303237,
+    "charge_end_uah": 5282162,
+    "drain_mah": 21.075,
+    "device_average_ma": 315.0093419140539,
+    "device_sampled_current_median_ma": 288.574,
+    "device_sampled_current_mean_ma": 313.3035882352941,
+    "level_start_pct": 97,
+    "level_end_pct": 96,
+    "temperature_start_c": 31.0,
+    "temperature_end_c": 31.0,
+    "process_cpu_pct_one_core": {
+      "io.github.mny315.carlitos": 0.1370147394643967,
+      "surfaceflinger": 0.07473531243512549,
+      "audioserver": 0.0,
+      "system_server": 1.5611376375337322,
+      "adbd": 0.22005397550342504
+    },
+    "valid": true,
+    "device_charge_linear_fit_ma": 315.54877044603666,
+    "charge_readings_distinct": 17,
+    "device_sampled_current_min_ma": 284.179,
+    "device_sampled_current_max_ma": 449.706,
+    "adb_sample_latency_median_s": 0.8275183719961205,
+    "adb_sample_latency_max_s": 0.9159752069972456,
+    "app_partial_wakelock_samples": 0,
+    "temperature_min_c": 31.0,
+    "temperature_max_c": 31.0,
+    "app_thread_cpu_seconds": [
+      {
+        "tid": 10602,
+        "thread": "ExoPlayer:Playb",
+        "cpu_s": 0.33
+      },
+      {
+        "tid": 10568,
+        "thread": "mny315.carlitos",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10573,
+        "thread": "Signal Catcher",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10574,
+        "thread": "perfetto_hprof_",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10575,
+        "thread": "Jit thread pool",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10576,
+        "thread": "HeapTaskDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10577,
+        "thread": "ReferenceQueueD",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10578,
+        "thread": "FinalizerDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10579,
+        "thread": "FinalizerWatchd",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10580,
+        "thread": "binder:10568_1",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10581,
+        "thread": "binder:10568_2",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10582,
+        "thread": "Profile Saver",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10583,
+        "thread": "carlitos-contro",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10584,
+        "thread": "carlitos-events",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10585,
+        "thread": "RenderThread",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10588,
+        "thread": "stdio-to-logcat",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10589,
+        "thread": "android_main",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10590,
+        "thread": "Verification th",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10591,
+        "thread": "carlitos-covers",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10592,
+        "thread": "slint vsync",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10593,
+        "thread": "Thread-29",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10596,
+        "thread": "binder:10568_3",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10599,
+        "thread": "queued-work-loo",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10600,
+        "thread": "ExoPlayer:Frame",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10601,
+        "thread": "ExoPlayer:Backg",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10603,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10676,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10823,
+        "thread": "carlitos-docume",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10824,
+        "thread": "carlitos-provid",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10827,
+        "thread": "binder:10568_5",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10828,
+        "thread": "ExoPlayer:Loade",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10829,
+        "thread": "AudioPortEventH",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10830,
+        "thread": "MediaCodec_loop",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10831,
+        "thread": "HwBinder:10568_",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10834,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10835,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10836,
+        "thread": "AudioTrack",
+        "cpu_s": 0.0
+      }
+    ]
+  },
+  {
+    "phase": "playing_screen_on",
+    "duration_s": 240.82000000000062,
+    "sample_count": 17,
+    "charge_start_uah": 5278377,
+    "charge_end_uah": 5239304,
+    "drain_mah": 39.073,
+    "device_average_ma": 584.0993272983956,
+    "device_sampled_current_median_ma": 560.546,
+    "device_sampled_current_mean_ma": 581.8292352941176,
+    "level_start_pct": 96,
+    "level_end_pct": 93,
+    "temperature_start_c": 31.0,
+    "temperature_end_c": 31.0,
+    "process_cpu_pct_one_core": {
+      "io.github.mny315.carlitos": 82.85026160617868,
+      "surfaceflinger": 20.965866622373504,
+      "audioserver": 3.5088447803338503,
+      "system_server": 1.3869279960136165,
+      "adbd": 0.18686155634913998
+    },
+    "valid": true,
+    "device_charge_linear_fit_ma": 584.0983346920391,
+    "charge_readings_distinct": 17,
+    "device_sampled_current_min_ma": 550.292,
+    "device_sampled_current_max_ma": 710.448,
+    "adb_sample_latency_median_s": 0.7929149609990418,
+    "adb_sample_latency_max_s": 0.8658507130021462,
+    "app_partial_wakelock_samples": 17,
+    "temperature_min_c": 31.0,
+    "temperature_max_c": 31.0,
+    "app_thread_cpu_seconds": [
+      {
+        "tid": 10589,
+        "thread": "android_main",
+        "cpu_s": 147.28
+      },
+      {
+        "tid": 10602,
+        "thread": "ExoPlayer:Playb",
+        "cpu_s": 19.33
+      },
+      {
+        "tid": 10830,
+        "thread": "MediaCodec_loop",
+        "cpu_s": 10.89
+      },
+      {
+        "tid": 10592,
+        "thread": "slint vsync",
+        "cpu_s": 5.03
+      },
+      {
+        "tid": 10580,
+        "thread": "binder:10568_1",
+        "cpu_s": 4.14
+      },
+      {
+        "tid": 10581,
+        "thread": "binder:10568_2",
+        "cpu_s": 3.44
+      },
+      {
+        "tid": 10835,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 3.18
+      },
+      {
+        "tid": 10676,
+        "thread": "binder:10568_4",
+        "cpu_s": 2.57
+      },
+      {
+        "tid": 10831,
+        "thread": "HwBinder:10568_",
+        "cpu_s": 1.89
+      },
+      {
+        "tid": 10834,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 1.41
+      },
+      {
+        "tid": 10568,
+        "thread": "mny315.carlitos",
+        "cpu_s": 0.98
+      },
+      {
+        "tid": 10583,
+        "thread": "carlitos-contro",
+        "cpu_s": 0.27
+      },
+      {
+        "tid": 10584,
+        "thread": "carlitos-events",
+        "cpu_s": 0.21
+      },
+      {
+        "tid": 10575,
+        "thread": "Jit thread pool",
+        "cpu_s": 0.19
+      },
+      {
+        "tid": 10828,
+        "thread": "ExoPlayer:Loade",
+        "cpu_s": 0.1
+      },
+      {
+        "tid": 10582,
+        "thread": "Profile Saver",
+        "cpu_s": 0.06
+      },
+      {
+        "tid": 10573,
+        "thread": "Signal Catcher",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10574,
+        "thread": "perfetto_hprof_",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10576,
+        "thread": "HeapTaskDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10577,
+        "thread": "ReferenceQueueD",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10578,
+        "thread": "FinalizerDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10579,
+        "thread": "FinalizerWatchd",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10585,
+        "thread": "RenderThread",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10588,
+        "thread": "stdio-to-logcat",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10590,
+        "thread": "Verification th",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10591,
+        "thread": "carlitos-covers",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10593,
+        "thread": "Thread-30",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10596,
+        "thread": "binder:10568_3",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10599,
+        "thread": "queued-work-loo",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10600,
+        "thread": "ExoPlayer:Frame",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10601,
+        "thread": "ExoPlayer:Backg",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10603,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10823,
+        "thread": "carlitos-docume",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10824,
+        "thread": "carlitos-provid",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10827,
+        "thread": "binder:10568_5",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10829,
+        "thread": "AudioPortEventH",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10836,
+        "thread": "AudioTrack",
+        "cpu_s": 0.0
+      }
+    ]
+  },
+  {
+    "phase": "playing_screen_off",
+    "duration_s": 241.0599999999995,
+    "sample_count": 17,
+    "charge_start_uah": 5236442,
+    "charge_end_uah": 5230033,
+    "drain_mah": 6.409,
+    "device_average_ma": 95.71227080394942,
+    "device_sampled_current_median_ma": 82.031,
+    "device_sampled_current_mean_ma": 106.18629411764707,
+    "level_start_pct": 93,
+    "level_end_pct": 93,
+    "temperature_start_c": 31.0,
+    "temperature_end_c": 31.0,
+    "process_cpu_pct_one_core": {
+      "io.github.mny315.carlitos": 21.46353604911645,
+      "surfaceflinger": 0.0,
+      "audioserver": 4.886750186675527,
+      "system_server": 1.3606570978179733,
+      "adbd": 0.27793910229818364
+    },
+    "valid": true,
+    "device_charge_linear_fit_ma": 96.23018759253408,
+    "charge_readings_distinct": 17,
+    "device_sampled_current_min_ma": 66.894,
+    "device_sampled_current_max_ma": 235.351,
+    "adb_sample_latency_median_s": 0.9303869239956839,
+    "adb_sample_latency_max_s": 0.9666102699993644,
+    "app_partial_wakelock_samples": 17,
+    "temperature_min_c": 31.0,
+    "temperature_max_c": 31.0,
+    "app_thread_cpu_seconds": [
+      {
+        "tid": 10602,
+        "thread": "ExoPlayer:Playb",
+        "cpu_s": 30.34
+      },
+      {
+        "tid": 10830,
+        "thread": "MediaCodec_loop",
+        "cpu_s": 12.36
+      },
+      {
+        "tid": 10835,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 2.16
+      },
+      {
+        "tid": 10831,
+        "thread": "HwBinder:10568_",
+        "cpu_s": 2.15
+      },
+      {
+        "tid": 10568,
+        "thread": "mny315.carlitos",
+        "cpu_s": 1.94
+      },
+      {
+        "tid": 10834,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 1.61
+      },
+      {
+        "tid": 10583,
+        "thread": "carlitos-contro",
+        "cpu_s": 0.37
+      },
+      {
+        "tid": 10575,
+        "thread": "Jit thread pool",
+        "cpu_s": 0.29
+      },
+      {
+        "tid": 10828,
+        "thread": "ExoPlayer:Loade",
+        "cpu_s": 0.27
+      },
+      {
+        "tid": 10589,
+        "thread": "android_main",
+        "cpu_s": 0.26
+      },
+      {
+        "tid": 10584,
+        "thread": "carlitos-events",
+        "cpu_s": 0.18
+      },
+      {
+        "tid": 10582,
+        "thread": "Profile Saver",
+        "cpu_s": 0.09
+      },
+      {
+        "tid": 10576,
+        "thread": "HeapTaskDaemon",
+        "cpu_s": 0.06
+      },
+      {
+        "tid": 10573,
+        "thread": "Signal Catcher",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10574,
+        "thread": "perfetto_hprof_",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10577,
+        "thread": "ReferenceQueueD",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10578,
+        "thread": "FinalizerDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10579,
+        "thread": "FinalizerWatchd",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10580,
+        "thread": "binder:10568_1",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10581,
+        "thread": "binder:10568_2",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10585,
+        "thread": "RenderThread",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10588,
+        "thread": "stdio-to-logcat",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10590,
+        "thread": "Verification th",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10591,
+        "thread": "carlitos-covers",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10592,
+        "thread": "slint vsync",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10593,
+        "thread": "Thread-37",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10596,
+        "thread": "binder:10568_3",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10599,
+        "thread": "queued-work-loo",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10600,
+        "thread": "ExoPlayer:Frame",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10601,
+        "thread": "ExoPlayer:Backg",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10603,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10676,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10823,
+        "thread": "carlitos-docume",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10824,
+        "thread": "carlitos-provid",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10827,
+        "thread": "binder:10568_5",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10829,
+        "thread": "AudioPortEventH",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10836,
+        "thread": "AudioTrack",
+        "cpu_s": 0.0
+      }
+    ]
+  },
+  {
+    "phase": "paused_screen_off",
+    "duration_s": 245.84000000000015,
+    "sample_count": 17,
+    "charge_start_uah": 5229434,
+    "charge_end_uah": 5226731,
+    "drain_mah": 2.703,
+    "device_average_ma": 39.58184184835663,
+    "device_sampled_current_median_ma": 19.531,
+    "device_sampled_current_mean_ma": 37.62582352941176,
+    "level_start_pct": 93,
+    "level_end_pct": 92,
+    "temperature_start_c": 31.0,
+    "temperature_end_c": 31.0,
+    "process_cpu_pct_one_core": {
+      "io.github.mny315.carlitos": 0.04474454930035793,
+      "surfaceflinger": 0.020338431500162697,
+      "audioserver": 0.0,
+      "system_server": 1.403351773511226,
+      "adbd": 0.2928734136023428
+    },
+    "valid": true,
+    "device_charge_linear_fit_ma": 39.958852601919105,
+    "charge_readings_distinct": 17,
+    "device_sampled_current_min_ma": 18.066,
+    "device_sampled_current_max_ma": 153.808,
+    "adb_sample_latency_median_s": 3.931933047999337,
+    "adb_sample_latency_max_s": 6.718192746004206,
+    "app_partial_wakelock_samples": 0,
+    "temperature_min_c": 31.0,
+    "temperature_max_c": 31.0,
+    "app_thread_cpu_seconds": [
+      {
+        "tid": 10602,
+        "thread": "ExoPlayer:Playb",
+        "cpu_s": 0.07
+      },
+      {
+        "tid": 10574,
+        "thread": "perfetto_hprof_",
+        "cpu_s": 0.03
+      },
+      {
+        "tid": 10588,
+        "thread": "stdio-to-logcat",
+        "cpu_s": 0.03
+      },
+      {
+        "tid": 10568,
+        "thread": "mny315.carlitos",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10573,
+        "thread": "Signal Catcher",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10575,
+        "thread": "Jit thread pool",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10576,
+        "thread": "HeapTaskDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10577,
+        "thread": "ReferenceQueueD",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10578,
+        "thread": "FinalizerDaemon",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10579,
+        "thread": "FinalizerWatchd",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10580,
+        "thread": "binder:10568_1",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10581,
+        "thread": "binder:10568_2",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10582,
+        "thread": "Profile Saver",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10583,
+        "thread": "carlitos-contro",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10584,
+        "thread": "carlitos-events",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10585,
+        "thread": "RenderThread",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10589,
+        "thread": "android_main",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10590,
+        "thread": "Verification th",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10591,
+        "thread": "carlitos-covers",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10592,
+        "thread": "slint vsync",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10593,
+        "thread": "Thread-38",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10596,
+        "thread": "binder:10568_3",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10599,
+        "thread": "queued-work-loo",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10600,
+        "thread": "ExoPlayer:Frame",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10601,
+        "thread": "ExoPlayer:Backg",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10603,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10676,
+        "thread": "binder:10568_4",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10823,
+        "thread": "carlitos-docume",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10824,
+        "thread": "carlitos-provid",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10827,
+        "thread": "binder:10568_5",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10828,
+        "thread": "ExoPlayer:Loade",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10829,
+        "thread": "AudioPortEventH",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10830,
+        "thread": "MediaCodec_loop",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10831,
+        "thread": "HwBinder:10568_",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10834,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10835,
+        "thread": "ExoPlayer:Media",
+        "cpu_s": 0.0
+      },
+      {
+        "tid": 10836,
+        "thread": "AudioTrack",
+        "cpu_s": 0.0
+      }
+    ]
+  },
+  {
+    "phase": "stopped_screen_off_control",
+    "duration_s": 243.25,
+    "sample_count": 17,
+    "charge_start_uah": 5226041,
+    "charge_end_uah": 5223395,
+    "drain_mah": 2.646,
+    "device_average_ma": 39.15971223021583,
+    "device_sampled_current_median_ma": 18.554,
+    "device_sampled_current_mean_ma": 30.473941176470586,
+    "level_start_pct": 92,
+    "level_end_pct": 92,
+    "temperature_start_c": 31.0,
+    "temperature_end_c": 31.0,
+    "process_cpu_pct_one_core": {
+      "surfaceflinger": 0.0041109969167523125,
+      "audioserver": 0.0,
+      "system_server": 1.4758478931140802,
+      "adbd": 0.28776978417266186,
+      "io.github.mny315.carlitos": 0.0
+    },
+    "valid": true,
+    "device_charge_linear_fit_ma": 38.068119815341966,
+    "charge_readings_distinct": 17,
+    "device_sampled_current_min_ma": 18.066,
+    "device_sampled_current_max_ma": 104.003,
+    "adb_sample_latency_median_s": 3.704651792999357,
+    "adb_sample_latency_max_s": 5.650776270995266,
+    "app_partial_wakelock_samples": 0,
+    "temperature_min_c": 31.0,
+    "temperature_max_c": 31.0,
+    "app_thread_cpu_seconds": []
+  }
+]

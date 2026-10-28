@@ -1,0 +1,8 @@
+PASS rate and silence changes queued immediately before a load are preserved
+PASS pause timing silence=false speed=1.0 touch=48ms before=6040 paused=6123 output=6200 settled=6123 saved=6123 resumed=6296 resumeElapsed=131ms mode=0 underruns=0 frames=3844 rate=48000 channels=1 route=2
+PASS pause timing silence=false speed=1.75 touch=41ms before=6760 paused=6869 output=7031 settled=6869 saved=6869 resumed=7234 resumeElapsed=133ms mode=0 underruns=0 frames=3844 rate=48000 channels=1 route=2
+FAIL java.lang.IllegalStateException: Resume moved away from the paused position: 6869 -> 7234
+	at io.github.mny315.carlitos.UiPauseKt.pauseResponsivenessChecks(UiPause.kt:128)
+	at io.github.mny315.carlitos.UiScenariosKt.run(UiScenarios.kt:65)
+	at io.github.mny315.carlitos.DeviceInstrumentation.onStart(DeviceInstrumentation.kt:169)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2361)

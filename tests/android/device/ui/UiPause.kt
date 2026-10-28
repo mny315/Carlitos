@@ -54,7 +54,7 @@ internal fun UiSuite.pauseResponsivenessChecks(requireBluetooth: Boolean = false
             result = runCatching {
                 val offset = BaseRenderer::class.java.getDeclaredField("streamOffsetUs").apply { isAccessible = true }.getLong(renderer)
                 val position = (sink.getCurrentPositionUs(false) - offset) / 1000
-                val track = DefaultAudioSink::class.java.getDeclaredField("audioTrack").apply { isAccessible = true }.get(sink) as AudioTrack
+                val track = DefaultAudioSink::class.java.getDeclaredField("audioTrack").apply { isAccessible = true }.get(sink.outputSink()) as AudioTrack
                 check(track.playState == AudioTrack.PLAYSTATE_PAUSED) { "AudioTrack did not actually pause" }
                 outputDetails = "mode=${track.performanceMode} underruns=${track.underrunCount} frames=${track.bufferSizeInFrames} rate=${track.sampleRate} channels=${track.channelCount} route=${track.routedDevice?.type}"
                 if (requireBluetooth) check(track.routedDevice?.type in listOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,

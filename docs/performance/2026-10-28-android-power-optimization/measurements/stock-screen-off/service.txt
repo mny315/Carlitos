@@ -1,0 +1,3 @@
+SERVICE io.github.mny315.carlitos/.PlaybackService c37747d pid=15637 user=0
+  Client:
+    CarlitosAudio {"token":4,"generation":1,"position":679924,"playing":true,"rate":1,"silence":false,"volume":0.7,"output_volume":0.7,"duration":900036,"uri":"content:\/\/com.android.providers.downloads.documents\/document\/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fvisualizer-motion-benchmark.mp3","phase":"ready","player":28742385,"error":null}

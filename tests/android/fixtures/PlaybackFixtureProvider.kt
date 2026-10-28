@@ -27,6 +27,7 @@ class PlaybackFixtureProvider : ContentProvider() {
         "pcm-16000", "pcm-44100", "pcm-96000" -> "$id.wav"
         "mp3-mono" -> "import-mono.mp3"
         "mp3-stereo" -> "import-stereo.mp3"
+        "mp3-long" -> "import-long.mp3"
         "aac" -> "import.aac"
         "m4b" -> "import.m4b"
         "he-aac-v1", "he-aac-v2" -> "import-$id.m4b"

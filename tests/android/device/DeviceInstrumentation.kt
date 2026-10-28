@@ -60,6 +60,7 @@ class DeviceInstrumentation : Instrumentation() {
     private var formatPlayMs = 150L
     private var settingsRecovery = false
     private var batteryOnly = false
+    private var powerOnly = false
     override fun onCreate(arguments: Bundle?) {
         syncOnly = arguments?.getString("sync-only") == "true"
         animationOnly = arguments?.getString("animation-only") == "true"
@@ -87,6 +88,7 @@ class DeviceInstrumentation : Instrumentation() {
         formatPlayMs = arguments?.getString("format-play-ms")?.toLong() ?: 150L
         settingsRecovery = arguments?.getString("settings-recovery") == "true"
         batteryOnly = arguments?.getString("battery-only") == "true"
+        powerOnly = arguments?.getString("power-only") == "true"
         if (!batteryOnly) {
             // Other suites exercise the app, without an onboarding dialog
             // covering their input or changing the device's battery policy.
@@ -116,6 +118,11 @@ class DeviceInstrumentation : Instrumentation() {
             if (settingsRecovery) {
                 UiSuite(this).settingsRecoveryNotice()
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android settings recovery notice\n") })
+                return
+            }
+            if (powerOnly) {
+                PlaybackSuite(this).run(powerOnly = true)
+                finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android background audio power transitions\n") })
                 return
             }
             if (formatsOnly) {

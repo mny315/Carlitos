@@ -1,0 +1,11 @@
+PASS foreground compressed output={"rate":32000,"channels":2,"mode":0,"underruns":0,"frames":2568,"capacity_frames":2568,"play_state":3,"start_frames":2568,"offloaded":false}
+PASS background compressed output={"rate":32000,"channels":2,"mode":0,"underruns":0,"frames":2568,"capacity_frames":2568,"play_state":3,"start_frames":2568,"offloaded":false}
+PASS background 1.0 clock 1974 ms / 2003 ms; exact pause and saved checkpoint
+PASS background 1.75 clock 3456 ms / 2001 ms; exact pause and saved checkpoint
+FAIL java.lang.IllegalStateException: Background output underrun
+	at io.github.mny315.carlitos.PlaybackPowerKt.backgroundPowerChecks$clock(PlaybackPower.kt:40)
+	at io.github.mny315.carlitos.PlaybackPowerKt.backgroundPowerChecks(PlaybackPower.kt:63)
+	at io.github.mny315.carlitos.PlaybackScenariosKt.run(PlaybackScenarios.kt:27)
+	at io.github.mny315.carlitos.PlaybackScenariosKt.run$default(PlaybackScenarios.kt:13)
+	at io.github.mny315.carlitos.DeviceInstrumentation.onStart(DeviceInstrumentation.kt:124)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2361)

@@ -1,0 +1,6 @@
+255
+0
+[V] will control stream=3 (STREAM_MUSIC)
+[V] will get volume
+[V] Connecting to AudioService
+[V] volume is 0 in range [0..25]

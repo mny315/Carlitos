@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 @UnstableApi
-internal fun PlaybackSuite.run(formatsOnly: Boolean = false, formatPlayMs: Long = 150) {
+internal fun PlaybackSuite.run(formatsOnly: Boolean = false, formatPlayMs: Long = 150, powerOnly: Boolean = false) {
     require(formatPlayMs in 150..10000)
     check(instrumentation.targetContext.packageName.endsWith(".playbacktest"))
     instrumentation.startActivitySync(Intent(instrumentation.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -24,6 +24,7 @@ internal fun PlaybackSuite.run(formatsOnly: Boolean = false, formatPlayMs: Long 
             "System seek increments must match the routed ±15 s commands"
         }
         mode("normal")
+        if (powerOnly) { backgroundPowerChecks(); return }
         val parts = fixture("Parts", listOf("tone", "part2"))
         val silent = fixture("Silence", listOf("silence")).single()
         val fault = fixture("Fault", listOf("fault")).single()

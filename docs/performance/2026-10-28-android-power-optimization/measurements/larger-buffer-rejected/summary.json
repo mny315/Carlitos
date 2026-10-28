@@ -1,0 +1,19 @@
+{
+  "name": "portable-background",
+  "duration_s": 120.98999999999978,
+  "drain_mah": 2.862,
+  "device_average_ma": 85.15745102901082,
+  "instantaneous_current_median_ma": 69.824,
+  "cpu_percent_one_core": {
+    "io.github.mny315.carlitos": 10.62071245557486,
+    "surfaceflinger": 0.008265145879824794,
+    "audioserver": 4.892966360856278,
+    "system_server": 1.5869080089263603
+  },
+  "rss_mib": {
+    "io.github.mny315.carlitos": 128.6328125,
+    "surfaceflinger": 39.9296875,
+    "audioserver": 21.5546875,
+    "system_server": 441.703125
+  }
+}
