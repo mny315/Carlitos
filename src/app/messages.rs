@@ -28,7 +28,6 @@ pub enum Command {
         serde_json::Value,
         std::sync::mpsc::Sender<anyhow::Result<serde_json::Value>>,
     ),
-    #[cfg(target_os = "android")]
     OpenDocument(Box<Media>, String),
     #[cfg(target_os = "android")]
     Picked(String, String, String, String),

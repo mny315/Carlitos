@@ -39,7 +39,7 @@ impl Handle {
                     Some(Store::open(&options.database))
                 };
                 let mut load_error = None;
-                let library = if options.demo {
+                let mut library = if options.demo {
                     demo_library()
                 } else {
                     match store.as_ref().unwrap() {
@@ -54,6 +54,24 @@ impl Handle {
                 };
                 if let Some(error) = load_error {
                     store = Some(Err(error));
+                }
+                // Android's notification Stop clears the live selection while
+                // retaining book progress. Reopen the last unfinished book on
+                // a cold start, even when no live session survived shutdown.
+                if library.session.current.is_none()
+                    && let Some(progress) = library
+                        .progress
+                        .iter()
+                        .filter(|p| {
+                            !p.completed
+                                && library
+                                    .part(p.part_id)
+                                    .is_some_and(|part| part.book_id == p.book_id)
+                        })
+                        .max_by_key(|p| p.updated)
+                {
+                    library.session.current = Some(Target::Book(progress.part_id));
+                    library.session.position = progress.position;
                 }
                 let audio = Audio::start(sender.clone(), options.fake_audio);
                 let mut app = Controller {

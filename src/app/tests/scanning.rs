@@ -2,6 +2,77 @@ use super::*;
 use crate::import::ScanResult;
 
 #[test]
+fn importing_one_file_keeps_the_current_playback_and_checkpoint() -> Result<()> {
+    for document in [false, true] {
+        for playing in [None, Some(false), Some(true)] {
+            let temp = tempfile::tempdir()?;
+            let (mut app, _) = controller(temp.path())?;
+            if let Some(playing) = playing {
+                let part = app.library.parts[1].id;
+                app.library.session.current = Some(Target::Book(part));
+                app.library.update_progress(4_000, false);
+                app.playback = Playback {
+                    phase: crate::player::Phase::Ready,
+                    position: 4_000,
+                    playing,
+                    ..Default::default()
+                };
+            }
+            let current = app.library.session.current.clone();
+            let position = app.library.session.position;
+            let file = temp.path().join("Added book.wav");
+            std::fs::copy(local_path(&app.library.media[0].uri).unwrap(), &file)?;
+            let scan = import::scan(vec![file], ImportMode::Book, ScanControl::default())?;
+            let media = scan.drafts[0].files[0].clone();
+            let (events, received) = async_channel::unbounded();
+            app.events = events;
+            for _ in 0..2 {
+                // Selecting an existing document must not start it either.
+                if document {
+                    app.handle(Command::OpenDocument(
+                        Box::new(media.clone()),
+                        "file-picker".into(),
+                    ))?;
+                } else {
+                    app.drafts = scan.drafts.clone();
+                    app.handle(Command::Import(app.scan_generation, "file-picker".into()))?;
+                }
+                assert_eq!(app.library.books.len(), 2);
+                assert_eq!(app.library.session.current, current);
+                assert_eq!(app.library.session.position, position);
+                assert_eq!(app.playback.playing, playing.unwrap_or(false));
+                assert_eq!(app.playback.position, position);
+                assert_eq!(
+                    app.playback.phase,
+                    if playing.is_some() {
+                        crate::player::Phase::Ready
+                    } else {
+                        crate::player::Phase::Empty
+                    }
+                );
+                let saved = app.store()?.load()?;
+                assert_eq!(saved.session.current, current);
+                assert_eq!(saved.session.position, position);
+                if playing.is_some() {
+                    assert_eq!(saved.progress[0].position, 4_000);
+                } else {
+                    assert!(saved.progress.is_empty());
+                }
+            }
+            assert_eq!(
+                std::iter::from_fn(|| received.try_recv().ok())
+                    .filter(
+                        |event| matches!(event, Event::Imported(_, owner) if owner == "file-picker")
+                    )
+                    .count(),
+                2
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn queued_preview_commands_cannot_modify_or_import_a_new_scans_preview() -> Result<()> {
     for action in ["edit", "file", "import"] {
         let temp = tempfile::tempdir()?;

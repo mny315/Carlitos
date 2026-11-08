@@ -77,6 +77,105 @@ fn controller_restores_paused_and_resume_uses_live_position() -> Result<()> {
 }
 
 #[test]
+fn a_stopped_book_returns_to_the_player_paused_after_restart() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let library = fixture(temp.path())?;
+    let part = library.parts[1].id;
+    let mut app = start(temp.path());
+    app.tx.send(Command::Part(part, 5_000))?;
+    ready(&app, 5_000, true)?;
+    app.tx.send(Command::Stop)?;
+    wait(
+        &app,
+        |e| matches!(e, Event::Library(l) if l.session.current.is_none()),
+    )?;
+    quit(&mut app)?;
+    let saved = Store::open(&temp.path().join("db"))?.load()?;
+    assert!(saved.session.current.is_none());
+    assert_eq!(saved.progress[0].part_id, part);
+    let mut restored = start(temp.path());
+    wait(
+        &restored,
+        |e| matches!(e, Event::Library(l) if l.session.current == Some(Target::Book(part))),
+    )?;
+    ready(&restored, saved.progress[0].position, false)?;
+    quit(&mut restored)?;
+    let after = Store::open(&temp.path().join("db"))?.load()?;
+    assert_eq!(after.progress[0].updated, saved.progress[0].updated);
+    Ok(())
+}
+
+#[test]
+fn an_empty_player_restores_the_latest_unfinished_book_without_overriding_a_saved_selection()
+-> Result<()> {
+    for selected in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let mut library = fixture(temp.path())?;
+        let mut store = Store::open(&temp.path().join("db"))?;
+        // Listening order differs from the catalog, and the most recent book
+        // has already been completed.
+        for index in 1..=2 {
+            let file = temp.path().join(format!("Book {index}.wav"));
+            std::fs::copy(local_path(&library.media[0].uri).unwrap(), &file)?;
+            let scan = import::scan(vec![file], ImportMode::Book, ScanControl::default())?;
+            library = store.import(scan.drafts)?;
+        }
+        let parts: Vec<_> = library
+            .books
+            .iter()
+            .map(|book| (library.book_parts(book.id)[0].id, book.id))
+            .collect();
+        library.progress = parts
+            .iter()
+            .enumerate()
+            .map(|(index, &(part_id, book_id))| Progress {
+                book_id,
+                part_id,
+                position: 2_000 + index as u64 * 1_000,
+                completed: index == 2,
+                updated: 100 + index as i64,
+            })
+            .collect();
+        library.session.current = selected.then_some(Target::Book(parts[0].0));
+        library.session.position = if selected { 2_000 } else { 0 };
+        store.save(&library.session, &library.progress)?;
+        let expected = if selected { 0 } else { 1 };
+        let mut app = start(temp.path());
+        wait(
+            &app,
+            |e| matches!(e, Event::Library(l) if l.session.current == Some(Target::Book(parts[expected].0))),
+        )?;
+        ready(&app, library.progress[expected].position, false)?;
+        quit(&mut app)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn completed_and_reset_books_do_not_repopulate_an_empty_player() -> Result<()> {
+    for completed in [false, true] {
+        let temp = tempfile::tempdir()?;
+        let mut library = fixture(temp.path())?;
+        library.session.current = Some(Target::Book(library.parts[0].id));
+        library.update_progress(4_000, completed);
+        library.session.current = None;
+        library.session.position = 0;
+        let mut store = Store::open(&temp.path().join("db"))?;
+        store.save(&library.session, &library.progress)?;
+        if !completed {
+            store.reset_book_progress(library.books[0].id)?;
+        }
+        let mut app = start(temp.path());
+        let Event::Library(library) = wait(&app, |e| matches!(e, Event::Library(_)))? else {
+            unreachable!()
+        };
+        assert!(library.session.current.is_none());
+        quit(&mut app)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn playback_retries_a_restored_file_without_losing_the_checkpoint() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let mut library = fixture(temp.path())?;

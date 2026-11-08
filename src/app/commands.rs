@@ -1,7 +1,6 @@
 use super::audio::AudioCommand;
 use super::{Command, Controller, Event, text};
 use crate::library::{Target, parse_time};
-#[cfg(target_os = "android")]
 use crate::storage::Draft;
 use anyhow::{Context, Result, bail};
 
@@ -56,10 +55,7 @@ impl Controller {
         }
         // A file returned by Android's picker imports immediately, without
         // passing through the folder preview's Import command.
-        #[cfg(target_os = "android")]
         let imports_document = matches!(&command, OpenDocument(..));
-        #[cfg(not(target_os = "android"))]
-        let imports_document = false;
         if self.maintenance
             && (imports_document
                 || matches!(
@@ -182,37 +178,17 @@ impl Controller {
             Picked(kind, uri, name, owner) => {
                 let _ = self.events.try_send(Event::Picked(kind, uri, name, owner));
             }
-            #[cfg(target_os = "android")]
             OpenDocument(file, owner) => {
                 self.save()?;
                 let uri = file.uri.clone();
-                let identity = file.identity.clone();
                 let library = self.store()?.import(vec![Draft {
-                    root_uri: uri.clone(),
+                    root_uri: uri,
                     title: file.title.clone(),
                     author: file.artist.clone(),
                     files: vec![*file],
                     include: true,
                 }])?;
                 self.reconcile(library);
-                let part = self
-                    .library
-                    .parts
-                    .iter()
-                    .find(|part| {
-                        self.library
-                            .media(part.file_id)
-                            .is_some_and(|file| file.identity == identity)
-                    })
-                    .context("Selected document has no part")?
-                    .id;
-                let position = self
-                    .library
-                    .progress
-                    .iter()
-                    .find(|p| p.part_id == part && !p.completed)
-                    .map_or(0, |p| p.position);
-                self.load(part, position, true)?;
                 let _ = self
                     .events
                     .try_send(Event::Imported(self.scan_generation, owner));
