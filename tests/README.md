@@ -74,6 +74,10 @@ runtime и отдельным UID: это позволяет проверять 
 он посылает себе SIGKILL даже на устройствах, где SELinux запрещает `run-as kill`.
 Перед холодным запуском тест ждёт до 90 секунд, пока пользователь разблокирует экран.
 После теста экран телефона гасится автоматически, в том числе при ошибке.
+Проверка `playback` также останавливает медиасессию и проверяет сохранение книги
+при повторном открытии и после смерти процесса. Для отдельной проверки нижнего
+плеера соберите тесты с `CARLITOS_ANDROID_UI_TESTS=1`, затем запустите
+`adb shell am instrument -e last-book-only true -w io.github.mny315.carlitos.test/io.github.mny315.carlitos.DeviceInstrumentation`.
 На Windows: `cargo test --locked --target x86_64-pc-windows-msvc`.
 
 Установщик после `./build.sh windows` можно проверить под Wine:

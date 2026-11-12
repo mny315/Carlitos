@@ -55,9 +55,9 @@ impl Handle {
                 if let Some(error) = load_error {
                     store = Some(Err(error));
                 }
-                // Android's notification Stop clears the live selection while
-                // retaining book progress. Reopen the last unfinished book on
-                // a cold start, even when no live session survived shutdown.
+                // Older versions cleared the selection on notification Stop.
+                // Recover those empty saved sessions from the latest unfinished
+                // book; new Stop commands retain the selection themselves.
                 if library.session.current.is_none()
                     && let Some(progress) = library
                         .progress

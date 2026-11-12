@@ -61,6 +61,7 @@ class DeviceInstrumentation : Instrumentation() {
     private var settingsRecovery = false
     private var batteryOnly = false
     private var powerOnly = false
+    private var lastBookOnly = false
     override fun onCreate(arguments: Bundle?) {
         syncOnly = arguments?.getString("sync-only") == "true"
         animationOnly = arguments?.getString("animation-only") == "true"
@@ -89,6 +90,7 @@ class DeviceInstrumentation : Instrumentation() {
         settingsRecovery = arguments?.getString("settings-recovery") == "true"
         batteryOnly = arguments?.getString("battery-only") == "true"
         powerOnly = arguments?.getString("power-only") == "true"
+        lastBookOnly = arguments?.getString("last-book-only") == "true"
         if (!batteryOnly) {
             // Other suites exercise the app, without an onboarding dialog
             // covering their input or changing the device's battery policy.
@@ -123,6 +125,11 @@ class DeviceInstrumentation : Instrumentation() {
             if (powerOnly) {
                 PlaybackSuite(this).run(powerOnly = true)
                 finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android background audio power transitions\n") })
+                return
+            }
+            if (lastBookOnly) {
+                PlaybackSuite(this).run(lastBookOnly = true)
+                finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "PASS Android last book restoration\n") })
                 return
             }
             if (formatsOnly) {

@@ -25,9 +25,15 @@ impl Controller {
             ..self.playback.clone()
         })
     }
-    pub(in crate::app) fn receive_playback(&mut self, snapshot: Playback) -> Result<bool> {
+    pub(in crate::app) fn receive_playback(&mut self, mut snapshot: Playback) -> Result<bool> {
         if snapshot.token != self.token {
             return Ok(false);
+        }
+        if snapshot.phase == crate::player::Phase::Empty && self.library.session.current.is_some() {
+            // A released decoder reports zero and no duration. The selected
+            // book still owns its confirmed checkpoint until playback resumes.
+            snapshot.position = self.library.session.position;
+            snapshot.duration = self.library.active_file().and_then(|file| file.duration);
         }
         let was_playing = self.playback.playing;
         let previous_position = self.playback.position;

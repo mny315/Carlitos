@@ -77,6 +77,43 @@ fn controller_restores_paused_and_resume_uses_live_position() -> Result<()> {
 }
 
 #[test]
+fn stopping_keeps_the_last_book_when_reopening_the_running_app() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (mut app, commands) = controller(temp.path())?;
+    let part = app.library.parts[1].id;
+    app.load(part, 5_000, true)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.playback.phase != crate::player::Phase::Ready {
+        app.handle(commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?)?;
+    }
+    app.handle(Command::Stop)?;
+    app.handle(Command::Hidden(true))?;
+    app.handle(Command::Hidden(false))?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let command = commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?;
+        let stopped = matches!(&command, Command::Playback(p) if p.token == app.token && p.phase == crate::player::Phase::Empty);
+        app.handle(command)?;
+        if stopped {
+            break;
+        }
+    }
+    assert_eq!(app.library.session.current, Some(Target::Book(part)));
+    assert_eq!(app.playback.position, app.library.session.position);
+    assert!(app.playback.position >= 5_000);
+    assert_eq!(app.playback.duration, Some(12_000));
+    assert!(!app.playback.playing && !app.playback.seekable);
+    let saved = app.store()?.load()?;
+    assert_eq!(saved.session.current, Some(Target::Book(part)));
+    assert!(saved.session.position >= 5_000);
+    app.handle(Command::Toggle)?;
+    assert_eq!(app.playback.phase, crate::player::Phase::Loading);
+    assert!(app.playback.position >= 5_000);
+    assert!(app.playback.playing);
+    Ok(())
+}
+
+#[test]
 fn a_stopped_book_returns_to_the_player_paused_after_restart() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let library = fixture(temp.path())?;
@@ -87,11 +124,11 @@ fn a_stopped_book_returns_to_the_player_paused_after_restart() -> Result<()> {
     app.tx.send(Command::Stop)?;
     wait(
         &app,
-        |e| matches!(e, Event::Library(l) if l.session.current.is_none()),
+        |e| matches!(e, Event::Library(l) if l.session.current == Some(Target::Book(part))),
     )?;
     quit(&mut app)?;
     let saved = Store::open(&temp.path().join("db"))?.load()?;
-    assert!(saved.session.current.is_none());
+    assert_eq!(saved.session.current, Some(Target::Book(part)));
     assert_eq!(saved.progress[0].part_id, part);
     let mut restored = start(temp.path());
     wait(

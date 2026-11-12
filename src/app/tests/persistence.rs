@@ -136,7 +136,8 @@ fn stopping_during_a_checkpoint_failure_still_stops_audio_and_keeps_progress_for
     let (mut app, commands) = controller(temp.path())?;
     let (events, received) = async_channel::unbounded();
     app.events = events;
-    app.load(app.library.parts[0].id, 3_000, true)?;
+    let part = app.library.parts[0].id;
+    app.load(part, 3_000, true)?;
     let deadline = Instant::now() + Duration::from_secs(5);
     while app.playback.phase != crate::player::Phase::Ready {
         app.handle(commands.recv_timeout(deadline.saturating_duration_since(Instant::now()))?)?;
@@ -156,19 +157,19 @@ fn stopping_during_a_checkpoint_failure_still_stops_audio_and_keeps_progress_for
         !app.playback.playing,
         "a write failure must not prevent Stop"
     );
-    assert_eq!(app.library.session.current, None);
+    assert_eq!(app.library.session.current, Some(Target::Book(part)));
     assert_eq!(app.library.progress[0].position, 4_000);
-    let mut cleared = false;
+    let mut retained = false;
     while let Ok(event) = received.try_recv() {
         if let Event::Library(library) = event {
-            cleared |= library.session.current.is_none();
+            retained |= library.session.current == Some(Target::Book(part));
         }
     }
     assert!(
-        cleared,
+        retained,
         "the UI must receive the stopped selection despite the save error"
     );
-    // A decoder snapshot queued before Stop must not revive its selection.
+    // A decoder snapshot queued before Stop must not restart playback.
     app.handle(Command::Playback(stale))?;
     assert_eq!(app.playback.phase, crate::player::Phase::Empty);
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -182,7 +183,7 @@ fn stopping_during_a_checkpoint_failure_still_stops_audio_and_keeps_progress_for
     conn.execute_batch("DROP TRIGGER reject_checkpoint;")?;
     app.save()?;
     let library = app.store()?.load()?;
-    assert_eq!(library.session.current, None);
+    assert_eq!(library.session.current, Some(Target::Book(part)));
     assert_eq!(library.progress[0].position, 4_000);
     Ok(())
 }

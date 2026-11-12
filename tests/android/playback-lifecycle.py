@@ -96,6 +96,18 @@ initial = state()
 assert not initial['playing'] and abs(initial['position'] - 8000) < 150, initial
 assert abs(initial['rate'] - 1.75) < .001 and initial['silence'] and abs(initial['volume'] - .25) < .001, initial
 report['cold_restore'] = initial
+key('STOP')
+until('Notification stop releases audio', lambda: state().get('phase') == 'empty')
+stopped = database('notification-stop')
+assert stopped['session']['current'] is not None, stopped
+assert abs(stopped['session']['position'] - 8000) < 150, stopped
+shell('am', 'force-stop', package)
+launch()
+after_stop = state()
+assert not after_stop['playing'] and abs(after_stop['position'] - 8000) < 150, after_stop
+assert after_stop['uri'] == initial['uri'], after_stop
+report['notification_stop_cold_restore'] = {'saved': stopped, 'restored': after_stop}
+print('PASS notification Stop retains the selected book and 8000 ms across process death', flush=True)
 key('PLAY')
 previous_pid = pid()
 shell('input', 'keyevent', 'KEYCODE_HOME')

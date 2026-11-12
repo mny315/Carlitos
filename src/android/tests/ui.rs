@@ -136,6 +136,9 @@ fn request(request: Value) -> Result<Value> {
         snapshot["background_enabled"] = json!(s.get_animated_background());
         snapshot["background_running"] = json!(s.get_backdrop_running());
         snapshot["ui_visible"] = json!(s.get_ui_visible());
+        snapshot["active"] = json!(s.get_active());
+        snapshot["current"] = json!(s.get_current().key.as_str());
+        snapshot["position_text"] = json!(s.get_position_text().as_str());
         snapshot["sync_enabled"] = json!(s.get_local_sync());
         snapshot["sync_manual"] = json!(s.get_sync_manual());
         snapshot["sync_invitation"] = json!(!s.get_sync_invitation().is_empty());

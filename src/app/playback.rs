@@ -158,11 +158,22 @@ impl Controller {
         self.playback.phase = crate::player::Phase::Seeking;
         self.audio.send(AudioCommand::Seek(self.token, position));
     }
-    pub(super) fn stop(&mut self) {
+    pub(super) fn stop_audio(&mut self) {
         self.pending_rate = None;
         self.restore_progress = None;
         self.token = self.token.wrapping_add(1);
         self.audio.send(AudioCommand::Stop(self.token));
+        self.playback = Playback {
+            token: self.token,
+            position: self.library.session.position,
+            duration: self.library.active_file().and_then(|file| file.duration),
+            rate: self.requested_rate,
+            skip_silence: self.requested_skip_silence,
+            ..Default::default()
+        };
+    }
+    pub(super) fn stop(&mut self) {
+        self.stop_audio();
         self.library.session.current = None;
         self.library.session.position = 0;
         self.playback = Playback {

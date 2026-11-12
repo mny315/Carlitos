@@ -198,10 +198,11 @@ impl Controller {
             Toggle => self.play(!self.playback.playing)?,
             Playing(value) => self.play(value)?,
             Stop => {
-                // Confirmed progress stays in memory when the selection is
-                // cleared. Stop audio and update the view even if persisting
-                // that checkpoint fails (for example on a full disk).
-                self.stop();
+                // Android can stop the notification while this process stays
+                // alive. Release audio but keep the book in the bottom player,
+                // including when its checkpoint write needs to be retried.
+                self.stop_audio();
+                let _ = self.events.try_send(Event::Playback(self.playback.clone()));
                 let saved = self.save();
                 self.emit_library();
                 saved?;
